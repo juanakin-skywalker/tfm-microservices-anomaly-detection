@@ -1,0 +1,8 @@
+# Ignorar métricas locales
+node-microservices/telegraf/tmp/*.out
+node-microservices/telegraf/tmp/*.log
+node-microservices/telegraf/tmp/gosnowflake-*
+node-microservices/telegraf/tmp/gosnowflake-*/**
+# Ignorar archivos ocultos del sistema
+.DS_Store
+.vscode/
