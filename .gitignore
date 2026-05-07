@@ -3,6 +3,17 @@ node-microservices/telegraf/tmp/*.out
 node-microservices/telegraf/tmp/*.log
 node-microservices/telegraf/tmp/gosnowflake-*
 node-microservices/telegraf/tmp/gosnowflake-*/**
+
 # Ignorar archivos ocultos del sistema
 .DS_Store
 .vscode/
+
+
+#ficheros de backup
+node-microservices/*.bak*
+
+#fichero que no parece necesario que hacer copia de seguridad
+node-microservices/internal
+node-microservices/pb
+node-microservices/src
+

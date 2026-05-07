@@ -1,0 +1,13 @@
+[[inputs.docker_log]]
+  endpoint = "unix:///var/run/docker.sock"
+  container_name_include = ["frontend"]
+  name_override = "frontend_traffic"
+
+#   ## FUERZA DESACTIVAR TLS:
+#   tls_ca = ""
+#   tls_cert = ""
+#   tls_key = ""
+#   insecure_skip_verify = true
+
+
+  tags = { destino = "archivo_log_frontend", service_name = "frontend" }
