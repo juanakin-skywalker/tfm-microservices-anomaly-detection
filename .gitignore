@@ -23,9 +23,16 @@ node-microservices/backup
 
 
 #ignorar estos directorios de server1
-server1/log
-server1/tmp
-server1/data
-server1/result
-server1/postgresql_data
-server1/backup
+server1/log/*
+!server1/log/.gitkeep
+server1/tmp/*
+!server1/tmp/.gitkeep
+server1/data/*
+!server1/data/.gitkeep
+server1/result/*
+!server1/result/.gitkeep
+server1/postgresql_data/*
+!server1/postgresql_data/.gitkeep
+server1/backup/*
+!server1/backup/.gitkeep
+
