@@ -4,16 +4,27 @@ node-microservices/telegraf/tmp/*.log
 node-microservices/telegraf/tmp/gosnowflake-*
 node-microservices/telegraf/tmp/gosnowflake-*/**
 
+
+# Ignorar el fichero de variables de entorno
+.env
+
 # Ignorar archivos ocultos del sistema
 .DS_Store
 .vscode/
 
 
-#ficheros de backup
-node-microservices/*.bak*
+
 
 #fichero que no parece necesario que hacer copia de seguridad
 node-microservices/internal
 node-microservices/pb
 node-microservices/src
+node-microservices/backup
 
+
+#ignorar estos directorios de server1
+server1/log
+server1/tmp
+server1/data
+server1/postgresql_data
+server1/backup
