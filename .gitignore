@@ -26,5 +26,6 @@ node-microservices/backup
 server1/log
 server1/tmp
 server1/data
+server1/result
 server1/postgresql_data
 server1/backup
