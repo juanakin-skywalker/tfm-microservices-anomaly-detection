@@ -35,4 +35,5 @@ server1/postgresql_data/*
 !server1/postgresql_data/.gitkeep
 server1/backup/*
 !server1/backup/.gitkeep
+server1/a.jsonl     #fichero que al final no volcaremos
 

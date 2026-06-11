@@ -3,7 +3,7 @@ version: '3.8'
 services:
   postgres_db:
     image: timescale/timescaledb:latest-pg16
-    container_name: tfm_timescale
+    container_name: ${TIMESCALE_CONTAINER_NAME}}
     restart: always
     # 💡 Le decimos a este servicio que busque el .env un nivel arriba (en la raíz)
     environment:

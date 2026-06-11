@@ -4,13 +4,30 @@ from psycopg2 import OperationalError
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 import json
+import subprocess
+import gzip
+import shutil
+import time
+from contextlib import contextmanager
+import io
+
+
+
+@contextmanager
+def medir_tiempo(nombre_proceso):
+    """Gestor de contexto para medir el tiempo de ejecución de forma elegante."""
+    print(f"⏱️ [INICIO] Ejecutando: '{nombre_proceso}'...")
+    inicio = time.perf_counter()
+    try:
+        yield
+    finally:
+        fin = time.perf_counter()
+        duracion = fin - inicio
+        print(f"⏱️ [FIN] '{nombre_proceso}' completado en {duracion:.4f} segundos.\n")
+
 
 class TimescaleDBManager:
     def __init__(self, user, password, host="localhost", port="5432", dbname="tfm_db"):
-        """
-        Constructor de la clase. Recibe los parámetros de conexión de forma explícita,
-        lo que permite desacoplar la lógica de la base de datos de la configuración del entorno.
-        """
         self.user = user
         self.password = password
         self.host = host
@@ -19,7 +36,6 @@ class TimescaleDBManager:
         self.connection = None
 
     def conectar(self):
-        """Establece la conexión con la base de datos TimescaleDB"""
         if self.connection is None or self.connection.closed != 0:
             try:
                 self.connection = psycopg2.connect(
@@ -37,7 +53,6 @@ class TimescaleDBManager:
         return self.connection
 
     def comprobar_conexion(self):
-        """Verifica si la conexión sigue activa ejecutando una consulta rápida"""
         if not self.connection or self.connection.closed != 0:
             return self.conectar() is not None
         
@@ -52,7 +67,6 @@ class TimescaleDBManager:
             return False
 
     def listar_tablas(self):
-        """Devuelve un listado con los nombres de todas las tablas en el esquema 'public'"""
         if not self.comprobar_conexion():
             print("❌ [ERROR] No se pueden listar las tablas sin una conexión activa.")
             return []
@@ -72,18 +86,12 @@ class TimescaleDBManager:
             return []
 
     def cerrar_conexion(self):
-        """Cierra la conexión de forma segura si está abierta"""
         if self.connection and self.connection.closed == 0:
             self.connection.close()
             print("🔒 Conexión con la base de datos cerrada de forma segura.")
 
-            
+
     def obtener_diagnostico_almacenamiento(self):
-        """
-        Analiza el almacenamiento del esquema público. Devuelve estadísticas de registros,
-        tamaño total, y si la tabla es una Hypertable de TimescaleDB, detalla sus chunks
-        y su estado de compresión.
-        """
         if not self.comprobar_conexion():
             print("❌ [ERROR] Sin conexión para realizar el diagnóstico de almacenamiento.")
             return []
@@ -167,12 +175,6 @@ class TimescaleDBManager:
             return []
 
     def insertar_registro(self, data):
-        """
-        Inserta un único registro de métrica en la hypertable 'metricas'.
-        Mapea automáticamente la clave 'group' del JSON a la columna 'grupo' de la BD.
-        """
-
-
         if not self.comprobar_conexion():
             print("❌ [ERROR] Sin conexión activa. No se puede insertar el registro.")
             return False
@@ -228,122 +230,181 @@ class TimescaleDBManager:
 
 
     def insertar_registros_masivos(self, lista_data, batch_size=100):
-            """
-            Inserta una lista de diccionarios en bloques (batches) de forma ultra rápida.
-            """
-            from psycopg2.extras import execute_batch
-            import json
-            from datetime import datetime, timezone
+        from psycopg2.extras import execute_batch
+        import json
+        from datetime import datetime, timezone
 
-            if not self.comprobar_conexion():
-                print("❌ [ERROR] Sin conexión activa.")
-                return False
+        if not self.comprobar_conexion():
+            print("❌ [ERROR] Sin conexión activa.")
+            return False
 
-            query = """
-                INSERT INTO metricas (
-                    time, instance, grupo, job, metric_name, metric_value, tags, label
-                ) VALUES (
-                    %s, %s, %s, %s, %s, %s, %s, %s
-                );
-            """
+        query = """
+            INSERT INTO metricas (
+                time, instance, grupo, job, metric_name, metric_value, tags, label
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s
+            );
+        """
 
-            # 1. Preparar y limpiar todos los datos en memoria antes de tocar la BD
-            valores_procesados = []
-            for data in lista_data:
-                # Tiempo
-                time_raw = data.get("time")
-                time_final = datetime.fromtimestamp(time_raw, tz=timezone.utc) if isinstance(time_raw, (int, float)) else time_raw
-                
-                # Métricas y grupo
-                metric_raw = data.get("metric_value")
-                metric_final = float(metric_raw) if metric_raw is not None else None
-                grupo_valor = data.get("grupo") if data.get("grupo") is not None else data.get("group")
-                
-                # Tags JSON
-                tags_raw = data.get("tags")
-                tags_json = json.dumps(tags_raw) if isinstance(tags_raw, dict) else tags_raw
+        # 1. Preparar y limpiar todos los datos en memoria antes de tocar la BD
+        valores_procesados = []
+        for data in lista_data:
+            # Tiempo
+            time_raw = data.get("time")
+            time_final = datetime.fromtimestamp(time_raw, tz=timezone.utc) if isinstance(time_raw, (int, float)) else time_raw
+            
+            # Métricas y grupo
+            metric_raw = data.get("metric_value")
+            metric_final = float(metric_raw) if metric_raw is not None else None
+            grupo_valor = data.get("grupo") if data.get("grupo") is not None else data.get("group")
+            
+            # Tags JSON
+            tags_raw = data.get("tags")
+            tags_json = json.dumps(tags_raw) if isinstance(tags_raw, dict) else tags_raw
 
-                valores_procesados.append((
-                    time_final, data.get("instance"), grupo_valor, data.get("job"),
-                    data.get("metric_name"), metric_final, tags_json, data.get("label")
-                ))
+            valores_procesados.append((
+                time_final, data.get("instance"), grupo_valor, data.get("job"),
+                data.get("metric_name"), metric_final, tags_json, data.get("label")
+            ))
 
-            # 2. Ejecutar la inserción por lotes dentro de una única transacción
-            try:
-                with self.connection:
-                    with self.connection.cursor() as cursor:
-                        execute_batch(cursor, query, valores_procesados, page_size=batch_size)
-                print(f"🚀 [OK] Insertados {len(lista_data)} registros en bloques de {batch_size}.")
-                return True
-            except Exception as e:
-                print(f"❌ [ERROR] Fallo en la inserción masiva: {e}")
-                self.connection.rollback()
-                return False
-                
+        # 2. Ejecutar la inserción por lotes dentro de una única transacción
+        try:
+            with self.connection:
+                with self.connection.cursor() as cursor:
+                    execute_batch(cursor, query, valores_procesados, page_size=batch_size)
+            print(f"🚀 [OK] Insertados {len(lista_data)} registros en bloques de {batch_size}.")
+            return True
+        except Exception as e:
+            print(f"❌ [ERROR] Fallo en la inserción masiva: {e}")
+            self.connection.rollback()
+            return False
+            
 
     def insertar_registros_copy(self, lista_data):
-            """
-            Inserta registros utilizando el comando COPY de PostgreSQL a través de un búfer de memoria.
-            Es la forma más rápida absoluta de cargar datos.
-            """
-            import io
-            import json
-            from datetime import datetime, timezone
 
-            if not self.comprobar_conexion():
-                print("❌ [ERROR] Sin conexión activa.")
+        if not self.comprobar_conexion():
+            print("❌ [ERROR] Sin conexión activa.")
+            return False
+
+        # Creamos un archivo de texto virtual en la memoria RAM
+        fichero_virtual = io.StringIO()
+
+        for data in lista_data:
+            # 1. Limpieza y preparación de datos (Igual que antes)
+            time_raw = data.get("time")
+            time_final = datetime.fromtimestamp(time_raw, tz=timezone.utc) if isinstance(time_raw, (int, float)) else time_raw
+            # Asegurar formato ISO string para el COPY
+            time_str = time_final.isoformat() if isinstance(time_final, datetime) else str(time_final)
+
+            metric_raw = data.get("metric_value")
+            metric_str = str(float(metric_raw)) if metric_raw is not None else "\\N" # \\N significa NULL en COPY
+            
+            grupo_valor = data.get("grupo") if data.get("grupo") is not None else data.get("group")
+            grupo_str = grupo_valor if grupo_valor is not None else "\\N"
+            
+            instance_str = data.get("instance") if data.get("instance") is not None else "\\N"
+            job_str = data.get("job") if data.get("job") is not None else "\\N"
+            metric_name_str = data.get("metric_name") if data.get("metric_name") is not None else "\\N"
+            label_str = data.get("label") if data.get("label") is not None else "\\N"
+
+            tags_raw = data.get("tags")
+            tags_json = json.dumps(tags_raw) if isinstance(tags_raw, dict) else (tags_raw if tags_raw is not None else "{}")
+
+            # 2. Creamos una línea delimitada por tabuladores (\t) limpia
+            # Es crítico que el orden coincida exactamente con las columnas que diremos en el COPY
+            linea = f"{time_str}\t{instance_str}\t{grupo_str}\t{job_str}\t{metric_name_str}\t{metric_str}\t{tags_json}\t{label_str}\n"
+            fichero_virtual.write(linea)
+
+        # Volvemos al principio del fichero virtual para que Postgres pueda leerlo desde el inicio
+        fichero_virtual.seek(0)
+
+        # 3. Lanzamos el comando COPY directo al motor
+        query = """
+            COPY metricas (time, instance, grupo, job, metric_name, metric_value, tags, label) 
+            FROM STDIN WITH DELIMITER AS '\t' NULL AS '\\N';
+        """
+
+        try:
+            with self.connection:
+                with self.connection.cursor() as cursor:
+                    cursor.copy_expert(sql=query, file=fichero_virtual)
+            print(f"⚡ [COPY OK] Volcados {len(lista_data)} registros por flujo directo a TimescaleDB.")
+            return True
+        except Exception as e:
+            print(f"❌ [ERROR] Fallo en el volcado COPY: {e}")
+            self.connection.rollback()
+            return False
+        finally:
+            fichero_virtual.close()
+
+    def realizar_backup(self, ruta_destino="backup_tfm.sql.gz", usar_docker=True, contenedor_name="timescaledb"):
+        # Asegurar que la extensión refleje que es un archivo comprimido
+        if not ruta_destino.endswith(".gz"):
+            ruta_destino += ".gz"
+
+        print(f"📦 [BACKUP WINDOWS] Iniciando copia de seguridad de '{self.dbname}'...")
+
+        # Configurar la contraseña en las variables de entorno efímeras
+        os.environ["PGPASSWORD"] = str(self.password)
+        
+        if usar_docker:
+            # Forzamos formato plano (-F p) para comprimir el texto SQL directamente con Python
+            comando_dump = [
+                "docker", "exec", "-e", f"PGPASSWORD={self.password}", contenedor_name,
+                "pg_dump", "-U", self.user, "-d", self.dbname, "-F", "p"
+            ]
+        else:
+            comando_dump = [
+                "pg_dump", "-h", self.host, "-p", str(self.port), "-U", self.user, "-d", self.dbname, "-F", "p"
+            ]
+
+        try:
+            # 1. Iniciamos el proceso pg_dump redirigiendo su salida a un pipe
+            # En Windows, incluimos creationflags para evitar que se abran ventanas de consola molestas
+            kwargs = {}
+            if os.name == 'nt': # Si es Windows
+                kwargs['creationflags'] = subprocess.CREATE_NO_WINDOW
+
+            proc_dump = subprocess.Popen(
+                comando_dump, 
+                stdout=subprocess.PIPE, 
+                stderr=subprocess.PIPE,
+                **kwargs
+            )
+            
+            # 2. Abrimos el archivo de destino con la librería gzip nativa de Python (Máxima compresión: compresslevel=9)
+            with gzip.open(ruta_destino, "wb", compresslevel=9) as fichero_comprimido:
+                # shutil.copyfileobj lee el flujo de pg_dump en bloques de memoria y los escribe comprimidos al vuelo
+                if proc_dump.stdout:
+                    shutil.copyfileobj(proc_dump.stdout, fichero_comprimido)
+            
+            # Esperamos a que termine el proceso y capturamos posibles errores
+            _, stderr_dump = proc_dump.communicate()
+
+            # Limpieza de la variable de entorno por seguridad
+            os.environ.pop("PGPASSWORD", None)
+
+            # Validar si pg_dump falló internamente (por ejemplo, contraseña errónea o contenedor apagado)
+            if proc_dump.returncode != 0:
+                print(f"❌ [BACKUP ERROR] Error en pg_dump: {stderr_dump.decode('utf-8', errors='ignore').strip()}")
+                # Si falló, borramos el archivo .gz residual que se haya podido crear vacío
+                if os.path.exists(ruta_destino):
+                    os.remove(ruta_destino)
                 return False
 
-            # Creamos un archivo de texto virtual en la memoria RAM
-            fichero_virtual = io.StringIO()
-
-            for data in lista_data:
-                # 1. Limpieza y preparación de datos (Igual que antes)
-                time_raw = data.get("time")
-                time_final = datetime.fromtimestamp(time_raw, tz=timezone.utc) if isinstance(time_raw, (int, float)) else time_raw
-                # Asegurar formato ISO string para el COPY
-                time_str = time_final.isoformat() if isinstance(time_final, datetime) else str(time_final)
-
-                metric_raw = data.get("metric_value")
-                metric_str = str(float(metric_raw)) if metric_raw is not None else "\\N" # \\N significa NULL en COPY
-                
-                grupo_valor = data.get("grupo") if data.get("grupo") is not None else data.get("group")
-                grupo_str = grupo_valor if grupo_valor is not None else "\\N"
-                
-                instance_str = data.get("instance") if data.get("instance") is not None else "\\N"
-                job_str = data.get("job") if data.get("job") is not None else "\\N"
-                metric_name_str = data.get("metric_name") if data.get("metric_name") is not None else "\\N"
-                label_str = data.get("label") if data.get("label") is not None else "\\N"
-
-                tags_raw = data.get("tags")
-                tags_json = json.dumps(tags_raw) if isinstance(tags_raw, dict) else (tags_raw if tags_raw is not None else "{}")
-
-                # 2. Creamos una línea delimitada por tabuladores (\t) limpia
-                # Es crítico que el orden coincida exactamente con las columnas que diremos en el COPY
-                linea = f"{time_str}\t{instance_str}\t{grupo_str}\t{job_str}\t{metric_name_str}\t{metric_str}\t{tags_json}\t{label_str}\n"
-                fichero_virtual.write(linea)
-
-            # Volvemos al principio del fichero virtual para que Postgres pueda leerlo desde el inicio
-            fichero_virtual.seek(0)
-
-            # 3. Lanzamos el comando COPY directo al motor
-            query = """
-                COPY metricas (time, instance, grupo, job, metric_name, metric_value, tags, label) 
-                FROM STDIN WITH DELIMITER AS '\t' NULL AS '\\N';
-            """
-
-            try:
-                with self.connection:
-                    with self.connection.cursor() as cursor:
-                        cursor.copy_expert(sql=query, file=fichero_virtual)
-                print(f"⚡ [COPY OK] Volcados {len(lista_data)} registros por flujo directo a TimescaleDB.")
+            # Comprobar el archivo resultante en tu máquina Windows
+            if os.path.exists(ruta_destino) and os.path.getsize(ruta_destino) > 0:
+                tamaño_mb = os.path.getsize(ruta_destino) / (1024 * 1024)
+                print(f"🚀 [BACKUP OK] Copia comprimida con éxito en Windows: '{ruta_destino}' ({tamaño_mb:.2f} MB)")
                 return True
-            except Exception as e:
-                print(f"❌ [ERROR] Fallo en el volcado COPY: {e}")
-                self.connection.rollback()
+            else:
+                print("❌ [BACKUP ERROR] El archivo comprimido se generó vacío.")
                 return False
-            finally:
-                fichero_virtual.close()
+
+        except Exception as e:
+            print(f"❌ [BACKUP ERROR] Error inesperado en el entorno Windows: {e}")
+            os.environ.pop("PGPASSWORD", None)
+            return False
 # =====================================================================
 # BLOQUE DE EJECUCIÓN PRINCIPAL (Prueba y Diagnóstico Local)
 # =====================================================================
@@ -395,8 +456,22 @@ if __name__ == "__main__":
             print(f"   🔹 {tabla}")
     else:
         print("📭 Conectado, pero el esquema público no contiene ninguna tabla base.")
-        
-    # 4. Finalizar de forma limpia
-    print("\n[Paso 5] Cerrando canales...")
+
+
+
+    print("\n[Paso 5] Diagnostico de almacenamiento...")
+    with medir_tiempo("Copia de seguridad y compresión Gzip"):
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ruta_con_timestamp = f"backup/{timestamp}_backup_tfm_db.sql.gz"
+        db.realizar_backup(
+            ruta_destino=ruta_con_timestamp,
+            usar_docker=True,
+            contenedor_name=os.getenv('TIMESCALE_CONTAINER_NAME')
+        )
+            
+    # 6. Finalizar de forma limpia
+    print("\n[Paso 6] Cerrando canales...")
     db.cerrar_conexion()
     print("=== [DIAGNÓSTICO] Pruebas finalizadas con éxito ===\n")
+
+
