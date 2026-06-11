@@ -1,3 +1,4 @@
+import logging
 import csv
 import os
 from datetime import datetime, timezone
@@ -11,6 +12,105 @@ import json
 import traceback
 import time
 from timescale import TimescaleDBManager
+import logging
+import os
+from datetime import datetime
+from contextlib import contextmanager
+
+
+@contextmanager
+def medir_tiempo(nombre_proceso):
+    """Gestor de contexto para medir el tiempo de ejecución de forma elegante."""
+    print(f"⏱️ [INICIO] Ejecutando: '{nombre_proceso}'...")
+    inicio = time.perf_counter()
+    try:
+        yield
+    finally:
+        fin = time.perf_counter()
+        duracion = fin - inicio
+        print(f"⏱️ [FIN] '{nombre_proceso}' completado en {duracion:.4f} segundos.\n")
+
+def loguear_excepcion(contexto, excepcion):
+    """
+    Extrae un diagnóstico forense completo de cualquier excepción y lo registra
+    en el sistema de logs (pantalla de forma compacta, disco de forma detallada).
+    
+    :param contexto: String descriptivo de la acción (ej. "Carga de miembro X", "Conexión DB")
+    :param excepcion: El objeto de la excepción capturado en el 'except'
+    """
+    log = logging.getLogger("pipeline")
+    log_oculto = logging.getLogger("pipeline.archivo")
+    
+    # 1. Extraer el tipo de error
+    tipo_error = type(excepcion).__name__
+    
+    # 2. Desempaquetar el traceback para obtener las coordenadas del fallo
+    _, _, exc_tb = sys.exc_info()
+    tb_detallado = traceback.extract_tb(exc_tb)
+    
+    if tb_detallado:
+        # Tomamos el último paso (donde rompió el código realmente)
+        ultimo_paso = tb_detallado[-1]
+        archivo = os.path.basename(ultimo_paso.filename)  # Limpia rutas de Windows
+        linea = ultimo_paso.lineno
+        funcion = ultimo_paso.name
+        codigo_linea = ultimo_paso.line
+    else:
+        archivo, linea, funcion, codigo_linea = "Desconocido", "N/A", "Desconocida", "N/A"
+
+    # 3. 📺 PANTALLA + 📁 DISCO: Alerta visual limpia para la consola
+    log.error(
+        f"❌ Fallo en [{contexto}] -> {tipo_error} "
+        f"({archivo} | {funcion}() | Línea {linea})"
+    )      
+    
+    # 4. 📁 SOLO DISCO: Auditoría forense completa en el archivo .log
+    log_oculto.info("=" * 60)
+    log_oculto.info(f"📋 DIAGNÓSTICO DE ERROR - CONTEXTO: {contexto.upper()}")
+    log_oculto.info(f"• Tipo de Error: {tipo_error}")
+    log_oculto.info(f"• Mensaje: {excepcion}")
+    log_oculto.info(f"• Archivo: {archivo}")
+    log_oculto.info(f"• Función: {funcion}()")
+    log_oculto.info(f"• Línea: {linea}")
+    log_oculto.info(f"• Código problemático: {codigo_linea}")
+    log_oculto.info("=" * 60)
+
+
+
+def configurar_logging(carpeta_logs="log"):
+    """Configura dos loggers con el mismo nivel INFO pero distintos destinos."""
+    os.makedirs(carpeta_logs, exist_ok=True)
+    fecha_hoy = datetime.now().strftime("%Y%m%d")
+    ruta_log = os.path.join(carpeta_logs, f"pipeline_carga_{fecha_hoy}.log")
+    
+    formato = logging.Formatter(
+        fmt="%(asctime)s [%(levelname)s] %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
+    )
+    
+    # --- HANDLERS COMPARTIDOS ---
+    file_handler = logging.FileHandler(ruta_log, encoding="utf-8")
+    file_handler.setFormatter(formato)
+    
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(formato)
+    
+    # 1. LOGGER PRINCIPAL: Va a Pantalla y a Disco
+    log_pantalla_y_disco = logging.getLogger("pipeline")
+    log_pantalla_y_disco.setLevel(logging.INFO)
+    log_pantalla_y_disco.propagate = False # Evita duplicados en el logger raíz
+    if not log_pantalla_y_disco.hasHandlers():
+        log_pantalla_y_disco.addHandler(file_handler)
+        log_pantalla_y_disco.addHandler(console_handler)
+        
+    # 2. LOGGER SILENCIOSO: Va SOLO a Disco
+    log_solo_disco = logging.getLogger("pipeline.archivo")
+    log_solo_disco.setLevel(logging.INFO)
+    log_solo_disco.propagate = False # Evita que el mensaje "suba" a la consola
+    if not log_solo_disco.hasHandlers():
+        log_solo_disco.addHandler(file_handler) # Solo le añadimos el manejador de archivo
+
+    logging.getLogger("pipeline").info("📝 Sistema de logging doble inicializado (INFO dual).")
 
 def cargar_labels_validos(fichero_labels):
     """
@@ -105,17 +205,18 @@ def cargar_datos_en_timescaledb(lista_datos_run):
     
     db.conectar()
 
-    t1=time.time()
-    # N=0
-    # for reg in lista_datos_run:
-    #     db.insertar_registro(reg)
-    #     N+=1
-    #     if N>=100000:
-    #         break
-    #db.insertar_registros_masivos(lista_datos_run, batch_size=1024)
-    db.insertar_registros_copy(lista_datos_run)
-    t2=time.time()
-    print('Carga realizada en %5.2f segundos'%(t2-t1))
+    with medir_tiempo("Carga de datose en metricas con COPY"):
+        # t1=time.time()
+        # N=0
+        # for reg in lista_datos_run:
+        #     db.insertar_registro(reg)
+        #     N+=1
+        #     if N>=100000:
+        #         break
+        #db.insertar_registros_masivos(lista_datos_run, batch_size=1024)
+        db.insertar_registros_copy(lista_datos_run)
+        # t2=time.time()
+        # print('Carga realizada en %5.2f segundos'%(t2-t1))
 
 
 
@@ -166,14 +267,14 @@ def procesar_datos_json(contenido_json,label):
 
 
 def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_labels_filtro):
-    # 1. Cargamos el filtro de etiquetas (ej: {'test_00_control', 'test_01_cpu'})
+
     labels_autorizados = cargar_labels_validos(fichero_labels_filtro)
-    print("Etiquetas autorizadas para cargar: ")
+    log.info("Etiquetas autorizadas para cargar: ")
     for label in labels_autorizados:
-        print(f'   {label}')
+        log.info(f'   {label}')
     
     if not labels_autorizados:
-        print("No hay etiquetas válidas para procesar.")
+        log.info("No hay etiquetas válidas para procesar.")
         return []
 
     # 2. Leemos el archivo de ejecuciones ignorando sus comentarios con el generador
@@ -188,13 +289,10 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
             # 4. Iteramos por cada ejecución registrada en el CSV de ejecuciones
             for run in lector_runs:
                 lista_datos_run=[]
-                #esto creo que no es necesario#label_ejecucion = run.get('label', '').strip().strip('"')
                 fichero_contenedor = run.get('file', '').strip().strip('"') # Archivo .tar
-                #esto creo que no es necesario#run_id = run.get('run', '').strip() # Identificador de la ejecución
-
 
                 if fichero_contenedor in archivo_zip.namelist():
-                    print(f'El fichero {fichero_contenedor} esta en el zip')
+                    log.info(f'El fichero {fichero_contenedor} esta en el zip')
                     # Leemos el contenido binario del TAR desde el ZIP sin extraerlo a disco
                     tar_bytes = archivo_zip.read(fichero_contenedor)
                     
@@ -207,7 +305,7 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                             if datatype is None:
                                 continue
                             if (label in labels_autorizados) and (datatype=='metric'):
-                                print(f'Empezamos a leer {miembro.name}')
+                                log_solo_disco.info(f'Empezamos a leer {miembro.name}')
                                 # print('===================')
                                 # print(miembro.name)
                                 # print(label)
@@ -216,35 +314,31 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                                 if fichero_objeto:
                                     try:
                                         contenido_json = json.loads(fichero_objeto.read().decode('utf-8'))
-                                        # print(f'Cargados datos de {miembro.name}')
-                                        # print(contenido_json)
                                         lista_datos=procesar_datos_json(contenido_json,label)
-                                        #print('---')
-                                        # print(lista_datos)
-                                        # for dato in lista_datos:
-                                        #     print(dato)
                                         lista_datos_run+=lista_datos
 
                                     except Exception as e:
-                                        print(f'Error al cargar datos de {miembro.name}')      
-                                        print(e)
+                                        loguear_excepcion(f"Carga de miembro: {miembro.name}", e)
+                                        # print(f'Error al cargar datos de {miembro.name}')      
+                                        # print(e)
                                 else: 
-                                    print(f'Error al cargar datos de {miembro.name}')  
-                                print(f'Fin lectura      {miembro.name}')
+                                    log.info(f'Error al cargar datos de {miembro.name}')  
+                                log_solo_disco.info(f'Fin lectura      {miembro.name}')
 
+                with medir_tiempo("Ordenar datos de la ejecución"):
+                    # t1=time.time()
+                    lista_datos_run.sort(key=lambda x: (
+                        x['time'],
+                        x['instance'],
+                        x['group'] if x['group'] is not None else '',  # Evita el TypeError con los nulos
+                        x['job'],
+                        x['metric_name'],
+                        x['label']
+                    ))
+                    log.info('N_datos = %i'%(len(lista_datos_run)))
+                    # t2=time.time()
+                    # print('Tiempo de ordenacion  =   %5.3f'%(t2-t1))
 
-                t1=time.time()
-                lista_datos_run.sort(key=lambda x: (
-                    x['time'],
-                    x['instance'],
-                    x['group'] if x['group'] is not None else '',  # Evita el TypeError con los nulos
-                    x['job'],
-                    x['metric_name'],
-                    x['label']
-                ))
-                t2=time.time()
-                print('Tiempo de ordenacion  =   %5.3f'%(t2-t1))
-                print('N_datos = %i'%(len(lista_datos_run)))
                 # for dato in lista_datos_run:
                 #     print(dato)
                 #volcar_fichero_metricas(lista_datos_run)
@@ -290,9 +384,14 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
 
 if __name__ == "__main__":
     load_dotenv()
+
+    configurar_logging()
+    log = logging.getLogger("pipeline")         
+    log_solo_disco = logging.getLogger("pipeline.archivo")  
+
     RUTA_DATASET = os.getenv("RUTA_DATASET")
     FOLDER_CONFIG = os.getenv("FOLDER_CONFIG")
-    label,datatype = get_label_and_datatype('light-oauth2-data-1719592986/access_token_authorization_form_401/metrics/')
+    # label,datatype = get_label_and_datatype('light-oauth2-data-1719592986/access_token_authorization_form_401/metrics/')
     # Tus rutas de archivos
     FICHERO_RUNS = f'{FOLDER_CONFIG}/files_run.csv'
     FICHERO_FILTRO_LABELS = f'{FOLDER_CONFIG}/labels.csv'
