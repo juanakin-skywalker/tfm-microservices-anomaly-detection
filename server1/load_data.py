@@ -10,6 +10,7 @@ import io
 import json
 import traceback
 import time
+from timescale import TimescaleDBManager
 
 def cargar_labels_validos(fichero_labels):
     """
@@ -87,12 +88,39 @@ def volcar_fichero_metricas(lista_datos_run):
         for reg in lista_datos_run:
             f.write(json.dumps(reg)+'\n')
 
+def cargar_datos_en_timescaledb(lista_datos_run):
+    user_env = os.getenv("USER_DB")
+    pass_env = os.getenv("PASS_DB")
+    host_env = os.getenv("HOST_DB", "localhost")
+    port_env = os.getenv("DB_PORT_EXPOSED", "5432")
+    db_env   = os.getenv("NAME_DB", "tfm_db")
+
+    db = TimescaleDBManager(
+        user=user_env,
+        password=pass_env,
+        host=host_env,
+        port=port_env,
+        dbname=db_env
+    )
+    
+    db.conectar()
+
+    t1=time.time()
+    # N=0
+    # for reg in lista_datos_run:
+    #     db.insertar_registro(reg)
+    #     N+=1
+    #     if N>=100000:
+    #         break
+    #db.insertar_registros_masivos(lista_datos_run, batch_size=1024)
+    db.insertar_registros_copy(lista_datos_run)
+    t2=time.time()
+    print('Carga realizada en %5.2f segundos'%(t2-t1))
+
 
 
 
 def procesar_datos_json(contenido_json,label):
-    # print('contenido_json')
-    # print(contenido_json)
     lista_result=[]
     lista_campos=('__name__','instance','group','job')
     reg0={'time':None,'__name__':None,'instance':None,'group':None,'job':None,'metric_value':None,'label':label}
@@ -219,7 +247,8 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                 print('N_datos = %i'%(len(lista_datos_run)))
                 # for dato in lista_datos_run:
                 #     print(dato)
-                volcar_fichero_metricas(lista_datos_run)
+                #volcar_fichero_metricas(lista_datos_run)
+                cargar_datos_en_timescaledb(lista_datos_run)
 
 
 

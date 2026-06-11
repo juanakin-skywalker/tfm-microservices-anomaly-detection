@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS metricas (
 
 -- 3. Transformar la tabla convencional en una Hypertable de TimescaleDB
 -- Esto activa el particionado automático por tiempo (por defecto en bloques de 7 días).
-SELECT create_hypertable('metricas', 'time', if_not_exists => TRUE);
+SELECT create_hypertable('metricas', 'time', if_not_exists => TRUE,chunk_time_interval => INTERVAL '1 day');
 
 -- 4. Creación de índices optimizados para Machine Learning e Ingesta masiva
 -- Este índice compuesto acelera radicalmente las búsquedas cuando tus scripts de Python 
