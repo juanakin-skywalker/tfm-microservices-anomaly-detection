@@ -1,3 +1,6 @@
+server/__pycache__/
+
+
 # Ignorar métricas locales
 node-microservices/telegraf/tmp/*.out
 node-microservices/telegraf/tmp/*.log
