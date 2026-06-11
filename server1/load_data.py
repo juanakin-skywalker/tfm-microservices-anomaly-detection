@@ -1,3 +1,4 @@
+
 import logging
 import csv
 import os
@@ -173,16 +174,6 @@ def get_label_and_datatype(path):
 
 
 def volcar_fichero_metricas(lista_datos_run):
-    # cabeceras=['time', 'metric_name', 'instance', 'group', 'job', 'metric_value', 'label', 'tags']
-    # fichero_salida='a.csv'
-    # with open(fichero_salida, 'w', encoding='utf-8', newline='') as f:
-    #     writer = csv.DictWriter(f, fieldnames=cabeceras)
-    #     writer.writeheader()
-    #     for reg in lista_datos_run:
-    #         reg2=reg.copy()
-    #         reg2['tags']=json.dumps(reg2.get('tags'))
-    #         writer.writerows(reg2)
-
     fichero_salida='a.jsonl'
     with open(fichero_salida, 'w', encoding='utf-8') as f:
         for reg in lista_datos_run:
@@ -205,26 +196,17 @@ def cargar_datos_en_timescaledb(lista_datos_run):
     
     db.conectar()
 
-    with medir_tiempo("Carga de datose en metricas con COPY"):
-        # t1=time.time()
-        # N=0
-        # for reg in lista_datos_run:
-        #     db.insertar_registro(reg)
-        #     N+=1
-        #     if N>=100000:
-        #         break
-        #db.insertar_registros_masivos(lista_datos_run, batch_size=1024)
+    with medir_tiempo("Carga de datos en metricas con COPY"):
         db.insertar_registros_copy(lista_datos_run)
-        # t2=time.time()
-        # print('Carga realizada en %5.2f segundos'%(t2-t1))
 
 
 
 
-def procesar_datos_json(contenido_json,label):
+
+def procesar_datos_json(contenido_json,label,execution_name):
     lista_result=[]
     lista_campos=('__name__','instance','group','job')
-    reg0={'time':None,'__name__':None,'instance':None,'group':None,'job':None,'metric_value':None,'label':label}
+    reg0={'time':None,'execution_name':execution_name,'__name__':None,'instance':None,'group':None,'job':None,'metric_value':None,'label':label}
     if type(contenido_json)!=list:
         contenido_json=[contenido_json]
     for dato_json in contenido_json:
@@ -235,18 +217,12 @@ def procesar_datos_json(contenido_json,label):
         if dato_json_metric is None:
             continue
         for key in dato_json_metric.keys():
-            # print(key)
-            # print(dato_json_metric[key])
             if key in lista_campos:
                 reg[key]      = dato_json_metric[key]
             else:
                 tags_dict[key] = dato_json_metric[key] 
     reg['metric_name'] = reg.pop('__name__', '')
     reg['tags']        = tags_dict
-    # print('reg=')
-    # print(reg)
-    # print('tags=')
-    # print(tag_dict)
 
     values_json=dato_json.get('values')
 
@@ -260,6 +236,8 @@ def procesar_datos_json(contenido_json,label):
         un_reg['time']          = value_data[0]
         un_reg['metric_value']  = value_data[1]
         lista_result.append(un_reg)
+
+
     return lista_result
 
 
@@ -283,13 +261,16 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
     datos_listos_para_bd = []
 
     # 3. Abrimos el fichero ZIP principal una sola vez para optimizar rendimiento
+
     try:
         with zipfile.ZipFile(fichero_dataset, 'r') as archivo_zip:
+            log.info(f'Abierto fichero zip {fichero_dataset}')
             
             # 4. Iteramos por cada ejecución registrada en el CSV de ejecuciones
             for run in lector_runs:
                 lista_datos_run=[]
                 fichero_contenedor = run.get('file', '').strip().strip('"') # Archivo .tar
+
 
                 if fichero_contenedor in archivo_zip.namelist():
                     log.info(f'El fichero {fichero_contenedor} esta en el zip')
@@ -314,11 +295,12 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                                 if fichero_objeto:
                                     try:
                                         contenido_json = json.loads(fichero_objeto.read().decode('utf-8'))
-                                        lista_datos=procesar_datos_json(contenido_json,label)
+                                        lista_datos=procesar_datos_json(contenido_json,label,fichero_contenedor)
                                         lista_datos_run+=lista_datos
 
                                     except Exception as e:
                                         loguear_excepcion(f"Carga de miembro: {miembro.name}", e)
+
                                         # print(f'Error al cargar datos de {miembro.name}')      
                                         # print(e)
                                 else: 
@@ -326,7 +308,6 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                                 log_solo_disco.info(f'Fin lectura      {miembro.name}')
 
                 with medir_tiempo("Ordenar datos de la ejecución"):
-                    # t1=time.time()
                     lista_datos_run.sort(key=lambda x: (
                         x['time'],
                         x['instance'],
@@ -336,8 +317,7 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                         x['label']
                     ))
                     log.info('N_datos = %i'%(len(lista_datos_run)))
-                    # t2=time.time()
-                    # print('Tiempo de ordenacion  =   %5.3f'%(t2-t1))
+
 
                 # for dato in lista_datos_run:
                 #     print(dato)
@@ -389,12 +369,24 @@ if __name__ == "__main__":
     log = logging.getLogger("pipeline")         
     log_solo_disco = logging.getLogger("pipeline.archivo")  
 
-    RUTA_DATASET = os.getenv("RUTA_DATASET")
-    FOLDER_CONFIG = os.getenv("FOLDER_CONFIG")
+
+
     # label,datatype = get_label_and_datatype('light-oauth2-data-1719592986/access_token_authorization_form_401/metrics/')
     # Tus rutas de archivos
-    FICHERO_RUNS = f'{FOLDER_CONFIG}/files_run.csv'
-    FICHERO_FILTRO_LABELS = f'{FOLDER_CONFIG}/labels.csv'
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+    # FICHERO_RUNS = f'{FOLDER_CONFIG}/files_run.csv'
+    # FICHERO_FILTRO_LABELS = f'{FOLDER_CONFIG}/labels.csv'
+    #RUTA_DATASET = os.getenv("RUTA_DATASET")
+
+
+    FOLDER_CONFIG = os.getenv("FOLDER_CONFIG")
+    FICHERO_RUNS          = os.path.join(BASE_DIR, f'{FOLDER_CONFIG}', "files_run.csv")
+    FICHERO_FILTRO_LABELS = os.path.join(BASE_DIR, f'{FOLDER_CONFIG}', "labels.csv")
+    RUTA_DATASET          = os.path.join(BASE_DIR, os.getenv("RUTA_DATASET"))
     
     # Lanzamos el pipeline
     registros_finales = preparar_datos_para_bd(RUTA_DATASET,FICHERO_RUNS, FICHERO_FILTRO_LABELS)
+
+
+    #al cambiar a BASE_DIR no 

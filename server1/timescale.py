@@ -296,6 +296,9 @@ class TimescaleDBManager:
             # Asegurar formato ISO string para el COPY
             time_str = time_final.isoformat() if isinstance(time_final, datetime) else str(time_final)
 
+            execution_name_valor = data.get("execution_name") if data.get("execution_name") is not None else data.get("execution_name")
+            execution_name_str = execution_name_valor if execution_name_valor is not None else "\\N"
+
             metric_raw = data.get("metric_value")
             metric_str = str(float(metric_raw)) if metric_raw is not None else "\\N" # \\N significa NULL en COPY
             
@@ -312,7 +315,7 @@ class TimescaleDBManager:
 
             # 2. Creamos una línea delimitada por tabuladores (\t) limpia
             # Es crítico que el orden coincida exactamente con las columnas que diremos en el COPY
-            linea = f"{time_str}\t{instance_str}\t{grupo_str}\t{job_str}\t{metric_name_str}\t{metric_str}\t{tags_json}\t{label_str}\n"
+            linea = f"{time_str}\t{execution_name_str}\t{instance_str}\t{grupo_str}\t{job_str}\t{metric_name_str}\t{metric_str}\t{tags_json}\t{label_str}\n"
             fichero_virtual.write(linea)
 
         # Volvemos al principio del fichero virtual para que Postgres pueda leerlo desde el inicio
@@ -320,7 +323,7 @@ class TimescaleDBManager:
 
         # 3. Lanzamos el comando COPY directo al motor
         query = """
-            COPY metricas (time, instance, grupo, job, metric_name, metric_value, tags, label) 
+            COPY metricas (time, execution_name,instance, grupo, job, metric_name, metric_value, tags, label) 
             FROM STDIN WITH DELIMITER AS '\t' NULL AS '\\N';
         """
 

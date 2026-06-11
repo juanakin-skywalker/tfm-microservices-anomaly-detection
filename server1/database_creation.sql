@@ -6,27 +6,29 @@
 CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
 
 -- 2. Creación de la tabla principal de métricas
--- Se utiliza el tipo REAL para optimizar el almacenamiento de los valores métricos.
+-- Se utiliza el tipo DOUBLE PRECISION para garantizar la máxima precisión en valores métricos.
 CREATE TABLE IF NOT EXISTS metricas (
-    time         TIMESTAMPTZ NOT NULL,   
-    instance     TEXT,                  
-    grupo        TEXT,                 
-    job          TEXT,                   
-    metric_name  TEXT,           
-    metric_value DOUBLE PRECISION,                
-    tags         JSONB,                  
-    label        TEXT           
+    time            TIMESTAMPTZ NOT NULL,   
+    execution_name  TEXT,                  -- Identificador único de cada simulación o ejecución del pipeline
+    instance        TEXT,                  
+    grupo           TEXT,                  
+    job             TEXT,                  
+    metric_name     TEXT,           
+    metric_value    DOUBLE PRECISION,                
+    tags            JSONB,                  
+    label           TEXT           
 );
 
 -- 3. Transformar la tabla convencional en una Hypertable de TimescaleDB
--- Esto activa el particionado automático por tiempo (por defecto en bloques de 7 días).
-SELECT create_hypertable('metricas', 'time', if_not_exists => TRUE,chunk_time_interval => INTERVAL '1 day');
+-- Esto activa el particionado automático por tiempo en bloques optimizados de 1 día.
+SELECT create_hypertable('metricas', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
 
 -- 4. Creación de índices optimizados para Machine Learning e Ingesta masiva
--- Este índice compuesto acelera radicalmente las búsquedas cuando tus scripts de Python 
--- filtren un tipo de métrica específico ordenado cronológicamente para entrenar los modelos.
-CREATE INDEX IF NOT EXISTS idx_metricas_name_time 
-ON metricas (metric_name, time DESC);
+-- Se incluye 'execution_name' en el índice compuesto para acelerar radicalmente las 
+-- búsquedas cuando los scripts de Python filtren una simulación específica y un tipo 
+-- de métrica ordenado cronológicamente para alimentar el modelo predictivo.
+CREATE INDEX IF NOT EXISTS idx_metricas_exec_name_time 
+ON metricas (execution_name, metric_name, time DESC);
 
 -- 5. Índice opcional para facilitar la segmentación por etiquetas de anomalías
 CREATE INDEX IF NOT EXISTS idx_metricas_label 
