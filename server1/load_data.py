@@ -1,7 +1,7 @@
 
 import logging
+from logging.handlers import RotatingFileHandler
 import csv
-import os
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 import tarfile
@@ -13,9 +13,7 @@ import json
 import traceback
 import time
 from timescale import TimescaleDBManager
-import logging
 import os
-from datetime import datetime
 from contextlib import contextmanager
 
 
@@ -32,13 +30,6 @@ def medir_tiempo(nombre_proceso):
         print(f"⏱️ [FIN] '{nombre_proceso}' completado en {duracion:.4f} segundos.\n")
 
 def loguear_excepcion(contexto, excepcion):
-    """
-    Extrae un diagnóstico forense completo de cualquier excepción y lo registra
-    en el sistema de logs (pantalla de forma compacta, disco de forma detallada).
-    
-    :param contexto: String descriptivo de la acción (ej. "Carga de miembro X", "Conexión DB")
-    :param excepcion: El objeto de la excepción capturado en el 'except'
-    """
     log = logging.getLogger("pipeline")
     log_oculto = logging.getLogger("pipeline.archivo")
     
@@ -112,6 +103,58 @@ def configurar_logging(carpeta_logs="log"):
         log_solo_disco.addHandler(file_handler) # Solo le añadimos el manejador de archivo
 
     logging.getLogger("pipeline").info("📝 Sistema de logging doble inicializado (INFO dual).")
+
+# def configurar_logging(carpeta_logs="logs"):
+#     """
+#     Configura la infraestructura de logging dual con rotación de archivos.
+#     - El logger 'pipeline' escribe en consola y en archivo.
+#     - El logger 'pipeline.archivo' escribe únicamente en el archivo.
+#     - Los archivos rotan al alcanzar los 10 MB, manteniendo un máximo de 10 backups.
+#     """
+#     # 1. Asegurar que la carpeta de destino exista
+#     os.makedirs(carpeta_logs, exist_ok=True)
+    
+#     # IMPORTANTE: Eliminamos la fecha del nombre base del archivo. 
+#     # Para que la rotación por tamaño funcione bien, el archivo activo debe llamarse siempre igual.
+#     ruta_log = os.path.join(carpeta_logs, "pipeline_carga.log")
+    
+#     # 2. Formato unificado para los mensajes
+#     formato = logging.Formatter(
+#         fmt="%(asctime)s [%(levelname)s] %(message)s",
+#         datefmt="%Y-%m-%d %H:%M:%S"
+#     )
+    
+#     # 3. --- HANDLERS COMPARTIDOS ---
+#     # Cambiamos FileHandler por RotatingFileHandler
+#     # 10 * 1024 * 1024 bytes = 10 MB. Guarda hasta 10 archivos de historial.
+#     file_handler = RotatingFileHandler(
+#         ruta_log, 
+#         maxBytes=10 * 1024 * 1024, 
+#         backupCount=10, 
+#         encoding="utf-8"
+#     )
+#     file_handler.setFormatter(formato)
+    
+#     console_handler = logging.StreamHandler()
+#     console_handler.setFormatter(formato)
+    
+#     # 4. LOGGER PRINCIPAL: Va a Pantalla (Consola) y a Disco (Archivo)
+#     log_pantalla_y_disco = logging.getLogger("pipeline")
+#     log_pantalla_y_disco.setLevel(logging.INFO)
+#     log_pantalla_y_disco.propagate = False 
+#     if not log_pantalla_y_disco.hasHandlers():
+#         log_pantalla_y_disco.addHandler(file_handler)
+#         log_pantalla_y_disco.addHandler(console_handler)
+        
+#     # 5. LOGGER SILENCIOSO: Va SOLO a Disco (Archivo)
+#     log_solo_disco = logging.getLogger("pipeline.archivo")
+#     log_solo_disco.setLevel(logging.INFO)
+#     log_solo_disco.propagate = False 
+#     if not log_solo_disco.hasHandlers():
+#         log_solo_disco.addHandler(file_handler) 
+
+#     log_pantalla_y_disco.info("📝 Sistema de logging doble inicializado (Rotación: 10MB, Máx: 10 archivos).")
+
 
 def cargar_labels_validos(fichero_labels):
     """
@@ -296,7 +339,7 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                 fichero_contenedor = run.get('file', '').strip().strip('"') # Archivo .tar
 
                 if fichero_contenedor in lista_ejecuciones_en_BBDD:
-                    log.info(f'El fichero {fichero_contenedor} ya esta en BBDD, no lo subimos.')
+                    #log.info(f'El fichero {fichero_contenedor} ya esta en BBDD, no lo subimos.')
                     continue
                 if fichero_contenedor in archivo_zip.namelist():
                     log.info(f'El fichero {fichero_contenedor} esta en el zip')
@@ -325,6 +368,8 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                                         lista_datos_run+=lista_datos
 
                                     except Exception as e:
+                                        log.info(f'Error al decodificar fichero ({miembro})')
+
                                         loguear_excepcion(f"Carga de miembro: {miembro.name}", e)
 
                                         # print(f'Error al cargar datos de {miembro.name}')      
@@ -396,22 +441,20 @@ if __name__ == "__main__":
 
 
 
-    # label,datatype = get_label_and_datatype('light-oauth2-data-1719592986/access_token_authorization_form_401/metrics/')
-    # Tus rutas de archivos
+
+
+
+    # Ahora sí, el mensaje inicial
+    log.info("📝 Sistema de logging doble inicializado (Rotación: 10MB, Máx: 10 archivos).")
+
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-    # FICHERO_RUNS = f'{FOLDER_CONFIG}/files_run.csv'
-    # FICHERO_FILTRO_LABELS = f'{FOLDER_CONFIG}/labels.csv'
-    #RUTA_DATASET = os.getenv("RUTA_DATASET")
-
 
     FOLDER_CONFIG = os.getenv("FOLDER_CONFIG")
     FICHERO_RUNS          = os.path.join(BASE_DIR, f'{FOLDER_CONFIG}', "files_run.csv")
     FICHERO_FILTRO_LABELS = os.path.join(BASE_DIR, f'{FOLDER_CONFIG}', "labels.csv")
     RUTA_DATASET          = os.path.join(BASE_DIR, os.getenv("RUTA_DATASET"))
     
-    # Lanzamos el pipeline
+
     registros_finales = preparar_datos_para_bd(RUTA_DATASET,FICHERO_RUNS, FICHERO_FILTRO_LABELS)
 
 
-    #al cambiar a BASE_DIR no 

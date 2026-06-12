@@ -774,12 +774,12 @@ if __name__ == "__main__":
         sys.exit()
     
     opciones_menu = [
-        {"comando": "1", "descripcion": "Diagnostico de almacenamiento", "accion": obtener_diagnostico_almacenamiento_reducido},
-        {"comando": "2", "descripcion": "Realizar backup", "accion": realizar_backup},
-        {"comando": "3", "descripcion": "Listado de tablas", "accion": listar_tablas},
-        {"comando": "4", "descripcion": "Analisis de chunks de tabla metricas", "accion": obtener_analisis_chunks_hipertabla_metricas},     
-        {"comando": "5", "descripcion": "Forzar compresión chunks no activos tabla(metricas)", "accion": comprimir_chunks_antiguos_tabla_metricas},  
-        {"comando": "6", "descripcion": "Resumen de execution_name tabla metricas", "accion": resumen_execution_name_tabla_metricas},  
+        {"comando": "1", "descripcion": "Diagnostico de almacenamiento", "accion": obtener_diagnostico_almacenamiento_reducido,'volcar_resultado':True},
+        {"comando": "2", "descripcion": "Realizar backup", "accion": realizar_backup,'volcar_resultado':False},
+        {"comando": "3", "descripcion": "Listado de tablas", "accion": listar_tablas,'volcar_resultado':True},
+        {"comando": "4", "descripcion": "Analisis de chunks de tabla metricas", "accion": obtener_analisis_chunks_hipertabla_metricas,'volcar_resultado':True},     
+        {"comando": "5", "descripcion": "Forzar compresión chunks no activos tabla(metricas)", "accion": comprimir_chunks_antiguos_tabla_metricas,'volcar_resultado':True},  
+        {"comando": "6", "descripcion": "Resumen de execution_name tabla metricas", "accion": resumen_execution_name_tabla_metricas,'volcar_resultado':True},  
         {"comando": "0", "descripcion": "Salir de la aplicación", "accion": None}
     ]  
 
@@ -793,7 +793,8 @@ if __name__ == "__main__":
                 print("\nCerrando conexiones y saliendo del programa. ¡Adiós!")
                 break
             resultado=opcion_elegida["accion"](db_manager)
-            imprimir_datos(resultado)
+            if opcion_elegida.get('volcar_resultado',False):
+                imprimir_datos(resultado)
         else:
             print(f"\n❌ Opción '{seleccion}' no válida. Inténtalo de nuevo.")
 
