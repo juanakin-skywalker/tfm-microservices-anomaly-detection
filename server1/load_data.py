@@ -258,6 +258,30 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
     # 2. Leemos el archivo de ejecuciones ignorando sus comentarios con el generador
     lineas_ejecuciones = filtrar_lineas_csv(fichero_registro_runs)
     lector_runs = csv.DictReader(lineas_ejecuciones)  
+
+
+
+    #hay que revisar para crear la conexion solo una vez y luego reutilizarla
+    user_env = os.getenv("USER_DB")
+    pass_env = os.getenv("PASS_DB")
+    host_env = os.getenv("HOST_DB", "localhost")
+    port_env = os.getenv("DB_PORT_EXPOSED", "5432")
+    db_env   = os.getenv("NAME_DB", "tfm_db")
+
+    db = TimescaleDBManager(
+        user=user_env,
+        password=pass_env,
+        host=host_env,
+        port=port_env,
+        dbname=db_env
+    )
+    db.conectar()
+    SQL='select distinct execution_name from metricas;'
+    resultados_db=db.ejecutar_select_generica(SQL)
+    lista_ejecuciones_en_BBDD = [row['execution_name'] for row in resultados_db]
+    #print(lista_ejecuciones_en_BBDD)
+
+
     datos_listos_para_bd = []
 
     # 3. Abrimos el fichero ZIP principal una sola vez para optimizar rendimiento
@@ -271,7 +295,9 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                 lista_datos_run=[]
                 fichero_contenedor = run.get('file', '').strip().strip('"') # Archivo .tar
 
-
+                if fichero_contenedor in lista_ejecuciones_en_BBDD:
+                    log.info(f'El fichero {fichero_contenedor} ya esta en BBDD, no lo subimos.')
+                    continue
                 if fichero_contenedor in archivo_zip.namelist():
                     log.info(f'El fichero {fichero_contenedor} esta en el zip')
                     # Leemos el contenido binario del TAR desde el ZIP sin extraerlo a disco
@@ -319,10 +345,9 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                     log.info('N_datos = %i'%(len(lista_datos_run)))
 
 
-                # for dato in lista_datos_run:
-                #     print(dato)
-                #volcar_fichero_metricas(lista_datos_run)
                 cargar_datos_en_timescaledb(lista_datos_run)
+
+                db.comprimir_chunks_antiguos('metricas')
 
 
 

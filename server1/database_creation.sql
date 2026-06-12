@@ -34,3 +34,12 @@ ON metricas (execution_name, metric_name, time DESC);
 CREATE INDEX IF NOT EXISTS idx_metricas_label 
 ON metricas (label) 
 WHERE label IS NOT NULL;
+
+
+
+-- 6. Configuración de la compresion de la tabla métricas, no será automática, habrá que lanzarla manualmente
+ALTER TABLE metricas SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'execution_name, metric_name, instance',
+    timescaledb.compress_orderby = 'time DESC'
+);
