@@ -1,5 +1,5 @@
-server/__pycache__/
-
+server1/__pycache__/
+server1/Untitled.ipynb
 
 # Ignorar métricas locales
 node-microservices/telegraf/tmp/*.out

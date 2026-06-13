@@ -10,6 +10,7 @@ import gzip
 import shutil
 import time
 from contextlib import contextmanager
+
 import io
 import sys
 
@@ -762,6 +763,22 @@ def realizar_backup(db_manager):
     )
 
 
+def analisis_EDA(db_manager):
+    SQL = """
+    SELECT 
+        COUNT(*) AS total_registros,
+        COUNT(*) - COUNT(metric_value) AS nulos_en_valores,
+        COUNT(*) - COUNT(label) AS nulos_en_etiquetas,
+        COUNT(*) - COUNT(time)  AS nulos_en_tiempo,
+        COUNT(*) - COUNT(job)   AS nulos_en_job,
+        COUNT(*) - COUNT(grupo) AS nulos_en_grupo
+    FROM metricas;
+    """
+    result=db_manager.ejecutar_select_generica(SQL)
+    print(result)
+
+
+
 # =====================================================================
 # BLOQUE DE EJECUCIÓN PRINCIPAL (Prueba y Diagnóstico Local)
 # =====================================================================
@@ -780,6 +797,7 @@ if __name__ == "__main__":
         {"comando": "4", "descripcion": "Analisis de chunks de tabla metricas", "accion": obtener_analisis_chunks_hipertabla_metricas,'volcar_resultado':True},     
         {"comando": "5", "descripcion": "Forzar compresión chunks no activos tabla(metricas)", "accion": comprimir_chunks_antiguos_tabla_metricas,'volcar_resultado':True},  
         {"comando": "6", "descripcion": "Resumen de execution_name tabla metricas", "accion": resumen_execution_name_tabla_metricas,'volcar_resultado':True},  
+        {"comando": "7", "descripcion": "EDA", "accion": analisis_EDA,'volcar_resultado':False},  
         {"comando": "0", "descripcion": "Salir de la aplicación", "accion": None}
     ]  
 
