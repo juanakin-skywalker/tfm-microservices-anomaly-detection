@@ -93,3 +93,31 @@ ALTER TABLE metricas_transformed SET (
 );
 
 
+
+-- 4. Tabla de escalado
+CREATE TABLE t_escalado (
+    tabla TEXT NOT NULL,
+    execution_name TEXT NOT NULL,
+    metric_name TEXT NOT NULL,
+    media DOUBLE PRECISION,
+    desv_std DOUBLE PRECISION,
+    PRIMARY KEY (tabla,execution_name, metric_name)
+);
+
+-- Índice para acelerar los JOINs entre tus métricas y esta tabla de escalado
+CREATE INDEX idx_escalado_lookup ON t_escalado (tabla,execution_name, metric_name);
+
+
+
+
+CREATE TABLE vectores (
+    vector_id BIGSERIAL PRIMARY KEY,
+    execution_name TEXT NOT NULL,
+    label TEXT NOT NULL,
+    t_rel FLOAT8 NOT NULL,
+    vector DOUBLE PRECISION[] NOT NULL
+);
+
+-- Índices optimizados para búsquedas frecuentes
+CREATE INDEX idx_vectores_label ON vectores(label);
+CREATE INDEX idx_vectores_execution ON vectores(execution_name);

@@ -2,7 +2,6 @@ import os
 import psycopg2
 from psycopg2 import OperationalError
 from psycopg2.extras import RealDictCursor
-from psycopg2 import extras
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 import json
@@ -277,40 +276,6 @@ class TimescaleDBManager:
         except Exception as e:
             print(f"❌ [ERROR] Error al calcular el almacenamiento: {e}")
             return []
-
-    def insertar_vectores_batch(self,lista_datos):
-        """
-        datos: Lista de tuplas (execution_name, label, t_rel, vector_lista)
-        """
-        SQL = """
-            INSERT INTO vectores (execution_name, label, t_rel, vector)
-            VALUES (%s, %s, %s, %s)
-        """
-        result=0
-        
-        lista_datos_transformados = [
-            (d['execution_name'], d['label'], d['t_rel'],  d['vector'])
-            for d in lista_datos
-        ]
-
-        with self.connection.cursor() as cur: 
-            try:
-                extras.execute_batch(cur, SQL, lista_datos_transformados, page_size=1000)
-                self.connection.commit()
-                result = len(lista_datos)
-
-        
-            except Exception as e:
-                result=0
-                if self.connection:
-                    self.connection.rollback()
-                    
-        return result
-
-
-
-
-
 
     def insertar_registro(self, data):
         if not self.comprobar_conexion():
