@@ -1,4 +1,4 @@
-    from timescale import TimescaleDBManager
+from timescale import TimescaleDBManager
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 import pandas as pd

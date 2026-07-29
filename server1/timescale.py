@@ -307,8 +307,51 @@ class TimescaleDBManager:
                     
         return result
 
-
-
+    
+    def insertar_datos_batch_generico(self, table_name, lista_diccionarios, page_size=1000):
+        """Inserta de forma masiva una lista de diccionarios en cualquier tabla de PostgreSQL.
+    
+        :param table_name: Nombre de la tabla (ej. 'vectores_split')
+        :param lista_diccionarios: Lista de diccionarios con las claves exactas de las columnas
+        """
+        if not lista_diccionarios:
+            return 0
+    
+        # 1. Extraemos las columnas automáticamente del primer diccionario
+        columnas = list(lista_diccionarios[0].keys())
+        
+        table = f"public.{table_name}" if "." not in table_name else table_name
+        columnas_str = ", ".join(columnas)
+        
+        # 2. CAMBIO CLAVE: Usamos un único '%s' para que execute_values maneja los bloques
+        sql = f"""
+            INSERT INTO {table} ({columnas_str})
+            VALUES %s
+        """
+    
+        # 3. Transformamos la lista de diccionarios en tuplas
+        lista_datos_transformados = [
+            tuple(d[col] for col in columnas) 
+            for d in lista_diccionarios
+        ]
+    
+        result = 0
+        with self.connection.cursor() as cur:
+            try:
+                # execute_values insertará el bloque usando el único '%s' definido arriba
+                extras.execute_values(cur, sql, lista_datos_transformados, page_size=page_size)
+                self.connection.commit()
+                result = len(lista_diccionarios)
+                print(f"Se insertaron correctamente {result} registros en {table_name}.")
+    
+            except Exception as e:
+                result = 0
+                if self.connection:
+                    self.connection.rollback()
+                print(f"Error al insertar en {table_name}: {e}")
+                raise
+    
+        return result
 
 
 

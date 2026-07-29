@@ -121,3 +121,16 @@ CREATE TABLE vectores (
 -- Índices optimizados para búsquedas frecuentes
 CREATE INDEX idx_vectores_label ON vectores(label);
 CREATE INDEX idx_vectores_execution ON vectores(execution_name);
+
+
+
+CREATE TABLE vectores_split (
+    vector_id BIGINT PRIMARY KEY,
+    split_type TEXT NOT NULL CHECK (split_type IN ('train', 'test', 'val','unknown')),
+    CONSTRAINT fk_vector 
+        FOREIGN KEY (vector_id) 
+        REFERENCES public.vectores(vector_id) 
+        ON DELETE CASCADE
+);
+
+
