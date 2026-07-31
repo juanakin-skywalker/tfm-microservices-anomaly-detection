@@ -50,9 +50,9 @@ class TimescaleDBManager:
                     database=self.dbname
                 )
                 self.connection.autocommit = True
-                print("🔌 [OK] Conexión establecida con TimescaleDB.")
+                print("[OK] Conexión establecida con TimescaleDB.")
             except OperationalError as e:
-                print(f"❌ [ERROR] No se pudo conectar a la base de datos: {e}")
+                print(f"[ERROR] No se pudo conectar a la base de datos: {e}")
                 self.connection = None
         return self.connection
 
@@ -115,7 +115,7 @@ class TimescaleDBManager:
     def listar_tablas(self):
         print('>>>>>>>>>>>>>>>')
         if not self.comprobar_conexion():
-            print("❌ [ERROR] No se pueden listar las tablas sin una conexión activa.")
+            print("[ERROR] No se pueden listar las tablas sin una conexión activa.")
             return []
 
         query = """
@@ -129,17 +129,17 @@ class TimescaleDBManager:
                 cursor.execute(query)
                 return [tabla[0] for tabla in cursor.fetchall()]
         except Exception as e:
-            print(f"❌ [ERROR] Error al obtener el listado de tablas: {e}")
+            print(f"[ERROR] Error al obtener el listado de tablas: {e}")
             return []
 
     def cerrar_conexion(self):
         if self.connection and self.connection.closed == 0:
             self.connection.close()
-            print("🔒 Conexión con la base de datos cerrada de forma segura.")
+            print("Conexión con la base de datos cerrada de forma segura.")
 
     def obtener_diagnostico_almacenamiento_reducido(self):
         if not self.comprobar_conexion():
-            print("❌ [ERROR] Sin conexión para realizar el diagnóstico.")
+            print("[ERROR] Sin conexión para realizar el diagnóstico.")
             return []
 
         # Listado base de tablas en el esquema público
@@ -189,7 +189,7 @@ class TimescaleDBManager:
             return diagnostico_reducido
             
         except Exception as e:
-            print(f"❌ [ERROR] Error al obtener el listado de tablas: {e}")
+            print(f"[ERROR] Error al obtener el listado de tablas: {e}")
             if self.connection:
                 self.connection.rollback()
             return []
@@ -197,7 +197,7 @@ class TimescaleDBManager:
 
     def obtener_diagnostico_almacenamiento(self):
         if not self.comprobar_conexion():
-            print("❌ [ERROR] Sin conexión para realizar el diagnóstico de almacenamiento.")
+            print("[ERROR] Sin conexión para realizar el diagnóstico de almacenamiento.")
             return []
 
         # 1. Obtener todas las tablas del usuario en el esquema público
@@ -275,7 +275,7 @@ class TimescaleDBManager:
             return diagnostico
             
         except Exception as e:
-            print(f"❌ [ERROR] Error al calcular el almacenamiento: {e}")
+            print(f"[ERROR] Error al calcular el almacenamiento: {e}")
             return []
 
     def insertar_vectores_batch(self,lista_datos):
@@ -404,7 +404,7 @@ class TimescaleDBManager:
                 cursor.execute(query, valores)
             return True
         except Exception as e:
-            print(f"❌ [ERROR] Error al insertar el registro: {e}")
+            print(f"[ERROR] Error al insertar el registro: {e}")
             return False
         
 
@@ -416,7 +416,7 @@ class TimescaleDBManager:
         from datetime import datetime, timezone
 
         if not self.comprobar_conexion():
-            print("❌ [ERROR] Sin conexión activa.")
+            print("[ERROR] Sin conexión activa.")
             return False
 
         query = """
@@ -453,10 +453,10 @@ class TimescaleDBManager:
             with self.connection:
                 with self.connection.cursor() as cursor:
                     execute_batch(cursor, query, valores_procesados, page_size=batch_size)
-            print(f"🚀 [OK] Insertados {len(lista_data)} registros en bloques de {batch_size}.")
+            print(f"[OK] Insertados {len(lista_data)} registros en bloques de {batch_size}.")
             return True
         except Exception as e:
-            print(f"❌ [ERROR] Fallo en la inserción masiva: {e}")
+            print(f"[ERROR] Fallo en la inserción masiva: {e}")
             self.connection.rollback()
             return False
             
@@ -464,7 +464,7 @@ class TimescaleDBManager:
     def insertar_registros_copy(self, lista_data, tabla ="metricas"):
 
         if not self.comprobar_conexion():
-            print("❌ [ERROR] Sin conexión activa.")
+            print("[ERROR] Sin conexión activa.")
             return False
 
         # Creamos un archivo de texto virtual en la memoria RAM
@@ -512,10 +512,10 @@ class TimescaleDBManager:
             with self.connection:
                 with self.connection.cursor() as cursor:
                     cursor.copy_expert(sql=query, file=fichero_virtual)
-            print(f"⚡ [COPY OK] Volcados {len(lista_data)} registros por flujo directo a TimescaleDB.")
+            print(f"[COPY OK] Volcados {len(lista_data)} registros por flujo directo a TimescaleDB.")
             return True
         except Exception as e:
-            print(f"❌ [ERROR] Fallo en el volcado COPY: {e}")
+            print(f"[ERROR] Fallo en el volcado COPY: {e}")
             self.connection.rollback()
             return False
         finally:
@@ -526,7 +526,7 @@ class TimescaleDBManager:
         if not ruta_destino.endswith(".gz"):
             ruta_destino += ".gz"
 
-        print(f"📦 [BACKUP WINDOWS] Iniciando copia de seguridad de '{self.dbname}'...")
+        print(f"[BACKUP WINDOWS] Iniciando copia de seguridad de '{self.dbname}'...")
 
         # Configurar la contraseña en las variables de entorno efímeras
         os.environ["PGPASSWORD"] = str(self.password)
@@ -574,7 +574,7 @@ class TimescaleDBManager:
 
             # Validar si pg_dump falló internamente (por ejemplo, contraseña errónea o contenedor apagado)
             if proc_dump.returncode != 0:
-                print(f"❌ [BACKUP ERROR] Error en pg_dump: {stderr_dump.decode('utf-8', errors='ignore').strip()}")
+                print(f"[BACKUP ERROR] Error en pg_dump: {stderr_dump.decode('utf-8', errors='ignore').strip()}")
                 # Si falló, borramos el archivo .gz residual que se haya podido crear vacío
                 if os.path.exists(ruta_destino):
                     os.remove(ruta_destino)
@@ -583,22 +583,22 @@ class TimescaleDBManager:
             # Comprobar el archivo resultante en tu máquina Windows
             if os.path.exists(ruta_destino) and os.path.getsize(ruta_destino) > 0:
                 tamaño_mb = os.path.getsize(ruta_destino) / (1024 * 1024)
-                print(f"🚀 [BACKUP OK] Copia comprimida con éxito en Windows: '{ruta_destino}' ({tamaño_mb:.2f} MB)")
+                print(f"[BACKUP OK] Copia comprimida con éxito en Windows: '{ruta_destino}' ({tamaño_mb:.2f} MB)")
                 return True
             else:
-                print("❌ [BACKUP ERROR] El archivo comprimido se generó vacío.")
+                print("[BACKUP ERROR] El archivo comprimido se generó vacío.")
                 return False
 
         except Exception as e:
-            print(f"❌ [BACKUP ERROR] Error inesperado en el entorno Windows: {e}")
+            print(f"[BACKUP ERROR] Error inesperado en el entorno Windows: {e}")
             os.environ.pop("PGPASSWORD", None)
             return False
 
     def realizar_restore(self, ruta_origen="backup_tfm.sql.gz", usar_docker=True, contenedor_name="timescaledb"):
-        print(f"📦 [RESTORE WINDOWS] Iniciando restauración de '{self.dbname}' desde '{ruta_origen}'...")
+        print(f"[RESTORE WINDOWS] Iniciando restauración de '{self.dbname}' desde '{ruta_origen}'...")
 
         if not os.path.exists(ruta_origen):
-            print(f"❌ [RESTORE ERROR] El archivo '{ruta_origen}' no existe.")
+            print(f"[RESTORE ERROR] El archivo '{ruta_origen}' no existe.")
             return False
 
         # Configurar la contraseña
@@ -651,15 +651,15 @@ class TimescaleDBManager:
             os.environ.pop("PGPASSWORD", None)
 
             if proc_restore.returncode == 0:
-                print(f"🚀 [RESTORE OK] Base de datos '{self.dbname}' restaurada correctamente.")
+                print(f"[RESTORE OK] Base de datos '{self.dbname}' restaurada correctamente.")
                 return True
             else:
                 error_msg = stderr_res.decode('utf-8', errors='ignore').strip()
-                print(f"❌ [RESTORE ERROR] Fallo en la restauración: {error_msg}")
+                print(f"[RESTORE ERROR] Fallo en la restauración: {error_msg}")
                 return False
 
         except Exception as e:
-            print(f"❌ [RESTORE ERROR] Error inesperado: {e}")
+            print(f"[RESTORE ERROR] Error inesperado: {e}")
             os.environ.pop("PGPASSWORD", None)
             return False
 
@@ -706,14 +706,14 @@ class TimescaleDBManager:
                 return desglose_chunks
                 
         except Exception as e:
-            print(f"❌ [ERROR] Error al calcular el desglose analítico de chunks: {e}")
+            print(f"[ERROR] Error al calcular el desglose analítico de chunks: {e}")
             if self.connection:
                 self.connection.rollback()
             return []
 
     def comprimir_chunks_antiguos(self, tabla):
         if not self.comprobar_conexion():
-            print(f"❌ [ERROR] Sin conexión para ejecutar la compresión de '{tabla}'.")
+            print(f"[ERROR] Sin conexión para ejecutar la compresión de '{tabla}'.")
             return False
 
         # 1. Consulta analítica para listar los chunks ordenados por rango descendente
@@ -734,19 +734,19 @@ class TimescaleDBManager:
                 chunks = cursor.fetchall()
                 
                 if not chunks:
-                    print(f"ℹ️ [INFO] No se encontraron chunks para la tabla '{tabla}'.")
+                    print(f"[INFO] No se encontraron chunks para la tabla '{tabla}'.")
                     return True
                 
                 if len(chunks) == 1:
-                    print(f"ℹ️ [INFO] La tabla '{tabla}' solo tiene 1 chunk (el actual). No se requiere comprimir nada.")
+                    print(f"[INFO] La tabla '{tabla}' solo tiene 1 chunk (el actual). No se requiere comprimir nada.")
                     return True
                 
                 # El primer chunk es el más reciente (debido al ordenamiento descendente)
                 chunk_reciente_name = chunks[0][0]
                 chunks_a_procesar = chunks[1:] # Excluimos el primero, nos quedamos con los antiguos
                 
-                print(f"🚀 Iniciando compresión selectiva para la tabla '{tabla}'...")
-                print(f"🔒 Chunk protegido (datos recientes): {chunk_reciente_name}")
+                print(f"Iniciando compresión selectiva para la tabla '{tabla}'...")
+                print(f"Chunk protegido (datos recientes): {chunk_reciente_name}")
                 
                 contador_comprimidos = 0
                 
@@ -757,7 +757,7 @@ class TimescaleDBManager:
                         continue
                         
                     try:
-                        print(f"📦 Comprimiendo chunk antiguo: {chunk_name}...")
+                        print(f"Comprimiendo chunk antiguo: {chunk_name}...")
                         # Invocamos la función nativa de TimescaleDB para empaquetar el chunk
                         cursor.execute("SELECT compress_chunk(format('%%I.%%I', chunk_schema, chunk_name)::regclass) FROM timescaledb_information.chunks WHERE chunk_name = %s LIMIT 1;", (chunk_name,))
                         cursor.fetchone()
@@ -766,13 +766,13 @@ class TimescaleDBManager:
                         # Si falla un chunk individual, hacemos rollback de esa operación para no bloquear el bucle
                         if self.connection:
                             self.connection.rollback()
-                        print(f"⚠️ [Aviso] No se pudo comprimir el chunk {chunk_name}: {error_chunk}")
+                        print(f"[Aviso] No se pudo comprimir el chunk {chunk_name}: {error_chunk}")
                 
-                print(f"✅ [OK] Proceso finalizado. Se han comprimido {contador_comprimidos} chunks antiguos en '{tabla}'.")
+                print(f"[OK] Proceso finalizado. Se han comprimido {contador_comprimidos} chunks antiguos en '{tabla}'.")
                 return True
                 
         except Exception as e:
-            print(f"❌ [ERROR] Error general durante la ejecución de la compresión: {e}")
+            print(f"[ERROR] Error general durante la ejecución de la compresión: {e}")
             if self.connection:
                 self.connection.rollback()
             return False
@@ -800,7 +800,7 @@ class TimescaleDBManager:
                 return resultado_estructurado
                 
         except Exception as e:
-            print(f"❌ [ERROR] Error al ejecutar la consulta genérica: {e}")
+            print(f"[ERROR] Error al ejecutar la consulta genérica: {e}")
             if self.connection:
                 self.connection.rollback()
             return []
@@ -823,7 +823,7 @@ def conectar_db():
     
     # Validación rápida de que el archivo .env está siendo leído
     if not user_env or not pass_env:
-        print("⚠️ [ALERTA] No se han detectado variables para iniciar la conexión con la base de datos.")
+        print("[ALERTA] No se han detectado variables para iniciar la conexión con la base de datos.")
         print("Asegúrate de tener un archivo .env válido en la raíz de la ejecución.\n")
         return db_manager
 
@@ -995,7 +995,7 @@ if __name__ == "__main__":
             if opcion_elegida.get('volcar_resultado',False):
                 imprimir_datos(resultado)
         else:
-            print(f"\n❌ Opción '{seleccion}' no válida. Inténtalo de nuevo.")
+            print(f"\nOpción '{seleccion}' no válida. Inténtalo de nuevo.")
 
         input("\nPresiona Enter para continuar...")
 

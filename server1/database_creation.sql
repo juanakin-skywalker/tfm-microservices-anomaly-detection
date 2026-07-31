@@ -109,7 +109,7 @@ CREATE INDEX idx_escalado_lookup ON t_escalado (tabla,execution_name, metric_nam
 
 
 
-
+-- 4. Tabla de vectores de características para Machine Learning
 CREATE TABLE vectores (
     vector_id BIGSERIAL PRIMARY KEY,
     execution_name TEXT NOT NULL,
@@ -134,3 +134,32 @@ CREATE TABLE vectores_split (
 );
 
 
+
+
+-- 5. tabla para logs de microsrervicios
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+CREATE TABLE IF NOT EXISTS microservicios_logs (
+    time TIMESTAMP NOT NULL,
+    execution_name TEXT,
+    service_name TEXT,
+    label TEXT,
+    thread TEXT,
+    trace_id TEXT,
+    level TEXT,
+    logger TEXT,
+    message TEXT,
+    exception_class TEXT
+);
+
+SELECT create_hypertable('microservicios_logs', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+
+CREATE INDEX idx_microservicios_logs_label ON microservicios_logs (label) WHERE label IS NOT NULL;;
+CREATE INDEX idx_microservicios_logs_execution_name ON microservicios_logs (execution_name);
+
+
+ALTER TABLE microservicios_logs SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'execution_name',
+    timescaledb.compress_orderby = 'time DESC'
+);
