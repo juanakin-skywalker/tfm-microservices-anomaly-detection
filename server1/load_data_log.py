@@ -174,7 +174,7 @@ def volcar_fichero_metricas(lista_datos_run):
         for reg in lista_datos_run:
             f.write(json.dumps(reg)+'\n')
 
-def cargar_datos_en_timescaledb(lista_datos_run):
+def cargar_datos_en_timescaledb(lista_datos_run,tabla):
     user_env = os.getenv("USER_DB")
     pass_env = os.getenv("PASS_DB")
     host_env = os.getenv("HOST_DB", "localhost")
@@ -192,7 +192,7 @@ def cargar_datos_en_timescaledb(lista_datos_run):
     db.conectar()
 
     with medir_tiempo("Carga de datos en metricas con COPY"):
-        #db.insertar_registros_copy(lista_datos_run)
+        db.insertar_registros_copy(lista_datos_run,tabla=tabla)
         pass
 
 
@@ -405,10 +405,11 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
     for k,v in dic_timestamp_min.items():
         log.info(f'Execution: {k} -> Min: {v["time_min"]}')
 
-    # SQL='select distinct execution_name from metricas;'
-    # resultados_db=db.ejecutar_select_generica(SQL)
-    # lista_ejecuciones_en_BBDD = [row['execution_name'] for row in resultados_db]
-    lista_ejecuciones_en_BBDD = []
+    SQL='select distinct execution_name from microservicios_logs;'
+    resultados_db=db.ejecutar_select_generica(SQL)
+    lista_ejecuciones_en_BBDD = [row['execution_name'] for row in resultados_db]
+    #lista_ejecuciones_en_BBDD = []
+    print(lista_ejecuciones_en_BBDD)
 
 
 
@@ -424,10 +425,16 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
             for run in lector_runs:
                 lista_datos_run=[]
                 fichero_contenedor = run.get('file', '').strip().strip('"') # Archivo .tar
-
                 if fichero_contenedor in lista_ejecuciones_en_BBDD:
                     #log.info(f'El fichero {fichero_contenedor} ya esta en BBDD, no lo subimos.')
+                    print(f'El fichero {fichero_contenedor} ya esta en BBDD, no lo subimos.')
                     continue
+                elif fichero_contenedor not in dic_timestamp_min.keys():
+                    print(f'No hay datos del execution_name {fichero_contenedor} en la tabla metricas, no podemos determinar el timestamp_min, no lo subimos.')
+                    continue
+                else:
+                    print(f'El fichero {fichero_contenedor} NO esta en BBDD, lo subimos.')
+
                 if fichero_contenedor in archivo_zip.namelist():
                     log.info(f'El fichero {fichero_contenedor} esta en el zip')
                     # Leemos el contenido binario del TAR desde el ZIP sin extraerlo a disco
@@ -446,11 +453,14 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                                 if miembro.name.find('locust.log')>=0:
                                     log_solo_disco.info(f'Ignoramos fichero {miembro.name}')
                                     continue
-                                print('===================')
-                                print(miembro.name)
-                                print(label)
-                                print(datatype)
+                                # print('===================')
+                                # print(miembro.name)
+                                # print(label)
+                                # print(datatype)
                                 fichero_objeto = archivo_tar.extractfile(miembro)
+                                # print(f'fichero_contenedor: {fichero_contenedor} -> fichero_objeto: {miembro.name} -> label: {label} -> datatype: {datatype}')
+                                # print(fichero_contenedor in list(dic_timestamp_min.keys()))
+                                # print(len(dic_timestamp_min.keys()))
                                 lista_datos=procesar_objeto_log(fichero_objeto, 
                                                                 service_name=extraer_nombre_servicio(miembro.name),
                                                                 label=label,
@@ -478,6 +488,9 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                                 else: 
                                     log.info(f'Error al cargar datos de {miembro.name}')  
                                 log_solo_disco.info(f'Fin lectura      {miembro.name}')
+
+
+                #lista_datos_run=lista_datos_run[:1000]  # Limitamos a los primeros 1000 registros para pruebas iniciales
                 df = pd.DataFrame(lista_datos_run)
                 for col in df.select_dtypes(include=['datetimetz']).columns:
                     df[col] = df[col].dt.tz_localize(None)
@@ -493,20 +506,20 @@ def preparar_datos_para_bd(fichero_dataset, fichero_registro_runs, fichero_label
                     ))
                     log.info('N_datos = %i'%(len(lista_datos_run)))
 
-                nombre_archivo = 'logs_procesados.xlsx'
-                df.to_excel(nombre_archivo, index=False, sheet_name='Logs')
-                nombre_archivo = "logs_procesados.csv"
-                df.to_csv(nombre_archivo, index=False, encoding='utf-8')
-                sys.exit(0)
 
-                cargar_datos_en_timescaledb(lista_datos_run)
+                # nombre_archivo = 'logs_procesados.xlsx'
+                # df.to_excel(nombre_archivo, index=False, sheet_name='Logs')
+                # nombre_archivo = "logs_procesados.csv"
+                # df.to_csv(nombre_archivo, index=False, encoding='utf-8')
 
-                #db.comprimir_chunks_antiguos('metricas')
+                cargar_datos_en_timescaledb(lista_datos_run,tabla='microservicios_logs')
 
-
+                db.comprimir_chunks_antiguos('microservicios_logs')
 
 
-                break  # Solo procesamos la primera ejecución para pruebas iniciales
+
+
+                #break  # Solo procesamos la primera ejecución para pruebas iniciales
 
 
 

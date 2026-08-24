@@ -99,8 +99,11 @@ if __name__ == "__main__":
     lista_ejecuciones_sel = get_lista_ejecuciones_sel(engine, FOLDER_SALIDA)
     lista_resultados = []
     N_ejecucion=0
-    tabla='metricas_transformed'
-    db.truncate_table('t_escalado')
+    tabla='metricas_logs'
+    SQL= f"DELETE FROM t_escalado WHERE tabla = '{tabla}';"
+    resultados_db=db.ejecutar_select_generica(SQL)
+    print(resultados_db)
+    #db.truncate_table('t_escalado')
 
     for una_ejecucion in lista_ejecuciones_sel:
         N_ejecucion+=1
@@ -146,7 +149,8 @@ if __name__ == "__main__":
         #     break
 
     df_escalado_metricas_transformed = pd.DataFrame(lista_resultados)
-    df_escalado_metricas_transformed.to_parquet(f'{FOLDER_SALIDA}/df_escalado_metricas_transformed.parquet', index=False,engine='fastparquet')
+    df_escalado_metricas_transformed.to_parquet(f'{FOLDER_SALIDA}/df_escalado_metricas_transformed(metricas_logs).parquet', index=False,engine='fastparquet')
+    df_escalado_metricas_transformed.to_excel(f'{FOLDER_SALIDA}/df_escalado_metricas_transformed(metricas_logs).xlsx', index=False)
 
 
 

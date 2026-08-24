@@ -29,6 +29,98 @@ def medir_tiempo(nombre_proceso):
         duracion = fin - inicio
         print(f"⏱️ [FIN] '{nombre_proceso}' completado en {duracion:.4f} segundos.\n")
 
+def clean_str(val):
+    if val is None or val == "":
+        return "\\N"
+    # Reemplazar tabuladores o saltos de línea dentro del mensaje para no romper el formato de columnas
+    return str(val).replace("\t", " ").replace("\n", " ")
+
+def preparar_linea_tabla_metricas(data):
+    # 1. Limpieza y preparación de datos (Igual que antes)
+    time_raw = data.get("time")
+    time_final = datetime.fromtimestamp(time_raw, tz=timezone.utc) if isinstance(time_raw, (int, float)) else time_raw
+    # Asegurar formato ISO string para el COPY
+    time_str = time_final.isoformat() if isinstance(time_final, datetime) else str(time_final)
+
+    execution_name_valor = data.get("execution_name") if data.get("execution_name") is not None else data.get("execution_name")
+    execution_name_str = execution_name_valor if execution_name_valor is not None else "\\N"
+
+    metric_raw = data.get("metric_value")
+    metric_str = str(float(metric_raw)) if metric_raw is not None else "\\N" # \\N significa NULL en COPY
+    
+    grupo_valor = data.get("grupo") if data.get("grupo") is not None else data.get("group")
+    grupo_str = grupo_valor if grupo_valor is not None else "\\N"
+    
+    instance_str = data.get("instance") if data.get("instance") is not None else "\\N"
+    job_str = data.get("job") if data.get("job") is not None else "\\N"
+    metric_name_str = data.get("metric_name") if data.get("metric_name") is not None else "\\N"
+    label_str = data.get("label") if data.get("label") is not None else "\\N"
+
+    tags_raw = data.get("tags")
+    tags_json = json.dumps(tags_raw) if isinstance(tags_raw, dict) else (tags_raw if tags_raw is not None else "{}")
+
+    # 2. Creamos una línea delimitada por tabuladores (\t) limpia
+    # Es crítico que el orden coincida exactamente con las columnas que diremos en el COPY
+    linea = (
+            f"{time_str}\t"
+            f"{execution_name_str}\t"
+            f"{instance_str}\t"
+            f"{grupo_str}\t"
+            f"{job_str}\t"
+            f"{metric_name_str}\t"
+            f"{metric_str}\t"
+            f"{tags_json}\t"
+            f"{label_str}\n"
+    )
+
+    return linea
+
+
+
+def preparar_linea_tabla_microservicios_logs(data):
+# 1. Limpieza y preparación de datos
+    time_raw = data.get("timestamp") or data.get("time")
+    time_final = datetime.fromtimestamp(time_raw, tz=timezone.utc) if isinstance(time_raw, (int, float)) else time_raw
+    # Asegurar formato ISO string para el COPY
+    time_str = time_final.isoformat() if isinstance(time_final, datetime) else str(time_final)
+
+    # 2. Función auxiliar de limpieza para campos de texto (\N para nulos)
+    def clean_str(val):
+        if val is None or val == "":
+            return "\\N"
+        return str(val).replace("\t", " ").replace("\n", " ")
+
+    # 3. Extracción de los campos en el orden exacto solicitado
+    execution_name_str = clean_str(data.get("execution_name"))
+    service_name_str = clean_str(data.get("service_name"))
+    label_str = clean_str(data.get("label"))
+    thread_str = clean_str(data.get("thread"))
+    trace_id_str = clean_str(data.get("trace_id"))
+    level_str = clean_str(data.get("level"))
+    logger_str = clean_str(data.get("logger"))
+    message_str = clean_str(data.get("message"))
+    exception_class_str = clean_str(data.get("exception_class"))
+
+    # 4. Construcción de la línea tabulada definitiva
+    linea = (
+        f"{time_str}\t"
+        f"{execution_name_str}\t"
+        f"{service_name_str}\t"
+        f"{label_str}\t"
+        f"{thread_str}\t"
+        f"{trace_id_str}\t"
+        f"{level_str}\t"
+        f"{logger_str}\t"
+        f"{message_str}\t"
+        f"{exception_class_str}\n"
+    )
+
+    return linea
+
+
+
+
+
 
 class TimescaleDBManager:
     def __init__(self, user, password, host="localhost", port="5432", dbname="tfm_db"):
@@ -278,12 +370,12 @@ class TimescaleDBManager:
             print(f"[ERROR] Error al calcular el almacenamiento: {e}")
             return []
 
-    def insertar_vectores_batch(self,lista_datos):
+    def insertar_vectores_batch(self,lista_datos,tabla="vectores"):
         """
         datos: Lista de tuplas (execution_name, label, t_rel, vector_lista)
         """
-        SQL = """
-            INSERT INTO vectores (execution_name, label, t_rel, vector)
+        SQL = f"""
+            INSERT INTO {tabla} (execution_name, label, t_rel, vector)
             VALUES (%s, %s, %s, %s)
         """
         result=0
@@ -459,10 +551,11 @@ class TimescaleDBManager:
             print(f"[ERROR] Fallo en la inserción masiva: {e}")
             self.connection.rollback()
             return False
-            
+
+
+
 
     def insertar_registros_copy(self, lista_data, tabla ="metricas"):
-
         if not self.comprobar_conexion():
             print("[ERROR] Sin conexión activa.")
             return False
@@ -471,47 +564,41 @@ class TimescaleDBManager:
         fichero_virtual = io.StringIO()
 
         for data in lista_data:
-            # 1. Limpieza y preparación de datos (Igual que antes)
-            time_raw = data.get("time")
-            time_final = datetime.fromtimestamp(time_raw, tz=timezone.utc) if isinstance(time_raw, (int, float)) else time_raw
-            # Asegurar formato ISO string para el COPY
-            time_str = time_final.isoformat() if isinstance(time_final, datetime) else str(time_final)
-
-            execution_name_valor = data.get("execution_name") if data.get("execution_name") is not None else data.get("execution_name")
-            execution_name_str = execution_name_valor if execution_name_valor is not None else "\\N"
-
-            metric_raw = data.get("metric_value")
-            metric_str = str(float(metric_raw)) if metric_raw is not None else "\\N" # \\N significa NULL en COPY
-            
-            grupo_valor = data.get("grupo") if data.get("grupo") is not None else data.get("group")
-            grupo_str = grupo_valor if grupo_valor is not None else "\\N"
-            
-            instance_str = data.get("instance") if data.get("instance") is not None else "\\N"
-            job_str = data.get("job") if data.get("job") is not None else "\\N"
-            metric_name_str = data.get("metric_name") if data.get("metric_name") is not None else "\\N"
-            label_str = data.get("label") if data.get("label") is not None else "\\N"
-
-            tags_raw = data.get("tags")
-            tags_json = json.dumps(tags_raw) if isinstance(tags_raw, dict) else (tags_raw if tags_raw is not None else "{}")
-
-            # 2. Creamos una línea delimitada por tabuladores (\t) limpia
-            # Es crítico que el orden coincida exactamente con las columnas que diremos en el COPY
-            linea = f"{time_str}\t{execution_name_str}\t{instance_str}\t{grupo_str}\t{job_str}\t{metric_name_str}\t{metric_str}\t{tags_json}\t{label_str}\n"
+            if tabla=="metricas":
+                linea = preparar_linea_tabla_metricas(data)
+            elif tabla=="microservicios_logs":
+                linea = preparar_linea_tabla_microservicios_logs(data)  
+            elif tabla=="metricas_logs":
+                linea = preparar_linea_tabla_metricas(data) 
+            else:
+                continue
             fichero_virtual.write(linea)
 
         # Volvemos al principio del fichero virtual para que Postgres pueda leerlo desde el inicio
         fichero_virtual.seek(0)
 
         # 3. Lanzamos el comando COPY directo al motor
-        query = f"""
-            COPY {tabla} (time, execution_name,instance, grupo, job, metric_name, metric_value, tags, label) 
-            FROM STDIN WITH DELIMITER AS '\t' NULL AS '\\N';
-        """
+        if tabla == "metricas" or tabla == "metricas_logs":
+            SQL = f"""
+                COPY {tabla} (time, execution_name,instance, grupo, job, metric_name, metric_value, tags, label) 
+                FROM STDIN WITH DELIMITER AS '\t' NULL AS '\\N';
+            """
+        elif tabla == "microservicios_logs":
+            SQL = f"""
+                COPY {tabla} (time, execution_name, service_name, label, thread, trace_id, level, logger, message, exception_class) 
+                FROM STDIN WITH DELIMITER AS '\t' NULL AS '\\N';
+            """
+        else:
+            print(f"[ERROR] La tabla '{tabla}' no está soportada para COPY.")
+            fichero_virtual.close()
+            return False
+
+        
 
         try:
             with self.connection:
                 with self.connection.cursor() as cursor:
-                    cursor.copy_expert(sql=query, file=fichero_virtual)
+                    cursor.copy_expert(sql=SQL, file=fichero_virtual)
             print(f"[COPY OK] Volcados {len(lista_data)} registros por flujo directo a TimescaleDB.")
             return True
         except Exception as e:

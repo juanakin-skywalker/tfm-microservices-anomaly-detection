@@ -136,7 +136,7 @@ CREATE TABLE vectores_split (
 
 
 
--- 5. tabla para logs de microsrervicios
+-- 5. tabla para logs de microservicios
 CREATE EXTENSION IF NOT EXISTS timescaledb;
 
 CREATE TABLE IF NOT EXISTS microservicios_logs (
@@ -152,10 +152,12 @@ CREATE TABLE IF NOT EXISTS microservicios_logs (
     exception_class TEXT
 );
 
-SELECT create_hypertable('microservicios_logs', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+SELECT create_hypertable('microservicios_logs', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 hour');
+
 
 CREATE INDEX idx_microservicios_logs_label ON microservicios_logs (label) WHERE label IS NOT NULL;;
 CREATE INDEX idx_microservicios_logs_execution_name ON microservicios_logs (execution_name);
+
 
 
 ALTER TABLE microservicios_logs SET (
@@ -163,3 +165,79 @@ ALTER TABLE microservicios_logs SET (
     timescaledb.compress_segmentby = 'execution_name',
     timescaledb.compress_orderby = 'time DESC'
 );
+
+
+--- vista para contabilidizar el numero de logs por servicio de forma rapida
+CREATE MATERIALIZED VIEW mv_service_counts_hourly
+WITH (timescaledb.continuous) AS
+SELECT 
+    time_bucket(INTERVAL '1 hour', time) AS bucket,
+    service_name,
+    COUNT(*) AS n
+FROM microservicios_logs
+GROUP BY bucket, service_name;
+
+
+
+
+
+-- 6. Tabla principal de metricas_logs, es equivalente a la tabla original de metricas, pero almacena metricas generadas a partir de los lgos
+-- 6.1. Creación de la tabla principal de métricas
+-- Se utiliza el tipo DOUBLE PRECISION para garantizar la máxima precisión en valores métricos.
+CREATE TABLE IF NOT EXISTS metricas_logs (
+    time            TIMESTAMPTZ NOT NULL,   
+    execution_name  TEXT,                  -- Identificador único de cada simulación o ejecución del pipeline
+    instance        TEXT,                  
+    grupo           TEXT,                  
+    job             TEXT,                  
+    metric_name     TEXT,           
+    metric_value    DOUBLE PRECISION,                
+    tags            JSONB,                  
+    label           TEXT           
+);
+
+-- 6.2. Transformar la tabla convencional en una Hypertable de TimescaleDB
+-- Esto activa el particionado automático por tiempo en bloques optimizados de 1 día.
+SELECT create_hypertable('metricas_logs', 'time', if_not_exists => TRUE, chunk_time_interval => INTERVAL '1 day');
+
+-- 6.3. Creación de índices optimizados para Machine Learning e Ingesta masiva
+-- Se incluye 'execution_name' en el índice compuesto para acelerar radicalmente las 
+-- búsquedas cuando los scripts de Python filtren una simulación específica y un tipo 
+-- de métrica ordenado cronológicamente para alimentar el modelo predictivo.
+CREATE INDEX IF NOT EXISTS idx_metricas_logs_exec_name_time 
+ON metricas_logs (execution_name, metric_name, time DESC);
+
+-- 6.4. Índice opcional para facilitar la segmentación por etiquetas de anomalías
+CREATE INDEX IF NOT EXISTS idx_metricas_logs_label 
+ON metricas_logs (label) 
+WHERE label IS NOT NULL;
+
+
+
+-- 6.5. Configuración de la compresion de la tabla métricas, no será automática, habrá que lanzarla manualmente
+ALTER TABLE metricas_logs SET (
+    timescaledb.compress,
+    timescaledb.compress_segmentby = 'execution_name, metric_name, instance',
+    timescaledb.compress_orderby = 'time DESC'
+);
+
+
+
+-- 7. Tabla de vectores de características para Machine Learning
+CREATE TABLE vectores_logs (
+    vector_id BIGSERIAL PRIMARY KEY,
+    execution_name TEXT NOT NULL,
+    label TEXT NOT NULL,
+    t_rel FLOAT8 NOT NULL,
+    vector DOUBLE PRECISION[] NOT NULL
+);
+
+-- Índices optimizados para búsquedas frecuentes
+CREATE INDEX idx_vectores_logs_label ON vectores_logs(label);
+CREATE INDEX idx_vectores_logs_execution ON vectores_logs(execution_name);
+
+
+
+
+
+
