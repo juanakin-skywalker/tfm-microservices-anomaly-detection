@@ -1,0 +1,22 @@
+[
+    "node_memory_VmallocTotal_bytes_diff",
+    "prometheus_config_last_reload_success_timestamp_seconds_diff",
+    "prometheus_target_sync_length_seconds_diff",
+    "node_memory_DirectMap4k_bytes_diff",
+    "process_start_time_seconds_diff",
+    "prometheus_tsdb_blocks_loaded_diff",
+    "node_softnet_dropped_total_diff",
+    "node_timex_tick_seconds_diff",
+    "node_os_version_diff",
+    "node_memory_DirectMap2M_bytes_diff",
+    "prometheus_target_sync_length_seconds_sum_diff",
+    "prometheus_tsdb_lowest_timestamp_diff",
+    "prometheus_tsdb_lowest_timestamp_seconds_diff",
+    "prometheus_tsdb_storage_blocks_bytes_diff",
+    "prometheus_tsdb_symbol_table_size_bytes_diff",
+    "prometheus_tsdb_wal_segment_current_diff",
+    "prometheus_tsdb_data_replay_duration_seconds_diff",
+    "prometheus_tsdb_head_min_time_diff",
+    "prometheus_tsdb_head_min_time_seconds_diff",
+    "prometheus_tsdb_head_series_removed_total_diff"
+]

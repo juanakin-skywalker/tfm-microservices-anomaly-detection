@@ -1,0 +1,154 @@
+{
+    "ultimo_trace_id": "YZKUDGCOSv6lDHa_BTAXQg",
+    "lista_reglas": [
+        {
+            "regex": "\"([^\"]+)\"",
+            "mask": "<QUOTED_VALUE>"
+        },
+        {
+            "regex": "validate\\( \"[^\"]+\", \"[^\"]+\", ([a-zA-Z0-9_]+)\\)",
+            "mask": "<VALIDATE_LAST_PARAM>",
+            "description": "Captures el último parámetro alfanumérico sin comillas dentro de una llamada a la función 'validate'."
+        },
+        {
+            "regex": "for\\s+([a-zA-Z0-9_\\-\\.]+\\.yml)\\s+in",
+            "mask": "<CONFIG_YML_NAME>",
+            "description": "Captura el nombre de un archivo de configuración YAML (ej. mask.yml) cuando se carga."
+        },
+        {
+            "regex": "in\\s+(/[a-zA-Z0-9_\\-]+)",
+            "mask": "<CONFIG_DIR_PATH>",
+            "description": "Captura la ruta de un directorio de configuración (ej. /config) donde se buscan archivos."
+        },
+        {
+            "regex": "normalised\\s+=\\s+(/[a-zA-Z0-9_/]+)",
+            "mask": "<NORMALIZED_URI>",
+            "description": "Captura una ruta URI normalizada (ej. /oauth2/user) después de la asignación 'normalised = '."
+        },
+        {
+            "regex": "\\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\\b",
+            "mask": "<UUID>",
+            "description": "Captura un identificador UUID (Universally Unique Identifier) en su formato estándar."
+        },
+        {
+            "regex": "\\{clientId\\}",
+            "mask": "<CLIENT_ID_PARAM>",
+            "description": "Captura el placeholder {clientId} usado en las definiciones de rutas."
+        },
+        {
+            "regex": "\"redirectUri\":\"(https?://[a-zA-Z0-9\\.-]+(?::\\d+)?/[a-zA-Z0-9/\\-\\._~:/?#\\[\\]@!$&'()*+,;=%]*)\"",
+            "mask": "<REDIRECT_URI_FULL>",
+            "description": "Captura el valor completo de un URI de redirección dentro de un campo 'redirectUri'."
+        },
+        {
+            "regex": "\"host\":\"([a-zA-Z0-9\\.-]+)\"",
+            "mask": "<HOST_DOMAIN>",
+            "description": "Captura el nombre de dominio del host dentro de un campo 'host'."
+        },
+        {
+            "regex": "requestBody(?:\\.[a-zA-Z0-9_]+)?",
+            "mask": "<REQUEST_BODY_PARAM_PATH>",
+            "description": "Captura el parámetro 'requestBody' con un campo de ruta opcional (ej. requestBody.fieldName)."
+        },
+        {
+            "regex": "([a-zA-Z0-9_\\-]+\\.java):(\\d+)",
+            "mask": "<JAVA_SOURCE_LOCATION>",
+            "description": "Captura la ubicación del archivo fuente y el número de línea en rastros de pila Java (ej. File.java:Line)."
+        },
+        {
+            "regex": "Trying to load ([a-zA-Z0-9_\\-]+) with extension",
+            "mask": "<CONFIG_NAME_NO_EXT>",
+            "description": "Captura el nombre de un archivo de configuración sin su extensión (ej. 'status') cuando se está cargando."
+        },
+        {
+            "regex": "for file ([a-zA-Z0-9_\\-\\.]+\\.yml)",
+            "mask": "<CONFIG_FILE_YML_FOR_FILE>",
+            "description": "Captura el nombre de un archivo .yml cuando se menciona específicamente con 'for file'."
+        },
+        {
+            "regex": "Setting error code (\\d+)",
+            "mask": "<HTTP_STATUS_CODE>",
+            "description": "Captura el código de estado HTTP (ej. 500) cuando se establece un error."
+        },
+        {
+            "regex": "HttpServerExchange\\{\\s*([A-Z]+)",
+            "mask": "<HTTP_METHOD_EXCHANGE>",
+            "description": "Captura el método HTTP (ej. PUT, GET) dentro de la descripción de HttpServerExchange."
+        },
+        {
+            "regex": "path\\s*=\\s*(/[a-zA-Z0-9_/\\-]+)",
+            "mask": "<LOG_URI_PATH>",
+            "description": "Captura una ruta URI (ej. /oauth2/client) después de 'path = ' con espacio opcional, permitiendo guiones."
+        },
+        {
+            "regex": "\\\"(https?:\\/\\/[a-zA-Z0-9\\.\\-]+(?:\\:\\d+)?\\/[a-zA-Z0-9\\/\\-\\._~:/?#\\[\\]@!$&'()*+,;=%]*)\\\"",
+            "mask": "<QUOTED_URL>",
+            "description": "Captura una URL completa cuando está entre comillas dobles, sin un prefijo de campo JSON específico."
+        },
+        {
+            "regex": "(\\{.*?\\})",
+            "mask": "<JSON_OBJECT_ARG>",
+            "description": "Captura una cadena de objeto JSON genérica (pares clave-valor en una sola línea) cuando aparece como un argumento de función."
+        },
+        {
+            "regex": "HttpServerExchange\\{\\s*[A-Z]+\\s*(\\/[a-zA-Z0-9_\\/\\-]+)\\}",
+            "mask": "<HTTP_EXCHANGE_URI_PATH>",
+            "description": "Captura la ruta URI (ej. /oauth2/client) dentro de una descripción de HttpServerExchange."
+        },
+        {
+            "regex": "base path is set to: (\\w+)",
+            "mask": "<BASE_PATH_VALUE>",
+            "description": "Captura el valor de la ruta base, que puede ser 'null' o una ruta específica."
+        },
+        {
+            "regex": "with extension\\s+([a-zA-Z0-9,\\s]+(?:\\s+or\\s+[a-zA-Z0-9]+|\\s+and\\s+[a-zA-Z0-9]+))",
+            "mask": "<FILE_EXT_LIST_GENERIC>",
+            "description": "Captures a list of file extensions, possibly separated by commas, 'or', or 'and'."
+        },
+        {
+            "regex": "Unable to load config ([a-zA-Z0-9_\\-\\.]+)\\\\",
+            "mask": "<FAILED_LOAD_FILE_NAME>",
+            "description": "Captures the name of the configuration file that failed to load."
+        },
+        {
+            "regex": "with extension ([a-zA-Z0-9]+)\\\\\\.\\\\\\.\\\\\\.\\\\",
+            "mask": "<NEXT_EXT_SEARCH>",
+            "description": "Captures the next file extension being sought after a failed config load."
+        },
+        {
+            "regex": "for file ([a-zA-Z0-9_\\-\\.]+\\.(?:yml|yaml|json))",
+            "mask": "<CONFIG_FILE_FOR_FILE>",
+            "description": "Captures the name of a configuration file (yml, yaml, or json) when mentioned with 'for file'."
+        },
+        {
+            "regex": "for\\s+([a-zA-Z0-9_\\-\\.]+\\.(?:yml|yaml|json))\\s+in",
+            "mask": "<CONFIG_FILE_IN_DIR>",
+            "description": "Captures the config file name (yml, yaml, or json) when mentioned with 'in /config'."
+        },
+        {
+            "regex": "Unable to load config '([a-zA-Z0-9_\\-]+)'",
+            "mask": "<UNABLE_LOAD_CONFIG_QUOTED_NAME>",
+            "description": "Captures the quoted name of a config that failed to load."
+        },
+        {
+            "regex": "Attempting to authenticate (/[a-zA-Z0-9_/]+), authentication required:",
+            "mask": "<AUTH_URI_PATH>",
+            "description": "Captures the URI path being authenticated."
+        },
+        {
+            "regex": "authentication required: (true|false)",
+            "mask": "<AUTH_REQUIRED_BOOLEAN>",
+            "description": "Captures the boolean value indicating if authentication is required."
+        },
+        {
+            "regex": "clazz = interface ([a-zA-Z0-9_\\-]+\\\\.[a-zA-Z0-9_\\-.]+)",
+            "mask": "<CLASS_INTERFACE_NAME>",
+            "description": "Captures the fully qualified class or interface name."
+        },
+        {
+            "regex": "([a-zA-Z0-9_\\-]+\\\\.[a-zA-Z0-9_\\-.]+)@([0-9a-fA-F]+)",
+            "mask": "<JAVA_OBJ_REF>",
+            "description": "Captures a Java object reference (class name and hash code)."
+        }
+    ]
+}

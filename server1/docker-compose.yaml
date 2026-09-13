@@ -5,7 +5,7 @@ services:
     image: timescale/timescaledb:latest-pg16
     container_name: ${TIMESCALE_CONTAINER_NAME}}
     restart: always
-    # 💡 Le decimos a este servicio que busque el .env un nivel arriba (en la raíz)
+    # Le decimos a este servicio que busque el .env un nivel arriba (en la raíz)
     environment:
       - POSTGRES_USER=${USER_DB}
       - POSTGRES_PASSWORD=${PASS_DB}

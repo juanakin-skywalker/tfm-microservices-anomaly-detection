@@ -1,0 +1,9 @@
+[
+    "prometheus_rule_evaluation_duration_seconds",
+    "prometheus_rule_group_duration_seconds",
+    "prometheus_sd_consul_rpc_duration_seconds",
+    "prometheus_sd_file_scan_duration_seconds",
+    "prometheus_sd_kuma_fetch_duration_seconds",
+    "prometheus_tsdb_wal_fsync_duration_seconds",
+    "prometheus_engine_query_duration_seconds"
+]
